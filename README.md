@@ -12,30 +12,9 @@ The app is now runtime-configurable and does not require Mac-specific paths.
 
 ## Required runtime files
 
-Place these in the data directory mounted into the container or available on the host:
+Place the files from data directory mounted into the container (GCshinyapp_data folder):
 
-- `seurat_merged_TME_malignant_final_umap_app_slim.rds`
-- `seurat_epithelial_normal_final_final_app_slim.rds`
-- `seurat_cancercells_final_app_slim.rds`
-- `seurat_Stromal_final_app_slim.rds`
-- `seurat_CD8T_final2_app_slim.rds`
-- `seurat_CD4T_final2_app_slim.rds`
-- `seurat_B_final2_app_slim.rds`
-- `seurat_Mye_final2_app_slim.rds`
-- `*_avg_cache.rds` files for the objects you want to support
-- `*_quadrant_cache.rds` for quadrant DEG plots
-- `dataset_group_colors.rds`
-- `path_group_colors.rds`
-- `subcluster_ct_colors_combined.rds`
-- `markers_RNA_merged_AllCelltypes_final.xlsx`
-- marker/DE `.xlsx` files for the other atlas objects you want exposed
 
-## Local run
-
-```bash
-cd /path/to/seurat-shiny-explorer
-GC_APP_DATA_DIR=/path/to/data R -e "shiny::runApp('.', launch.browser = TRUE)"
-```
 
 ## Docker run
 
@@ -80,10 +59,7 @@ Start:
 docker compose up -d --build
 ```
 
-## Admin handoff
-
-The administrator only needs:
-
+## to admin (Lucas)
 1. This repository
 2. A host data directory containing the required `.rds`, cache, and `.xlsx` files
 3. One of:
@@ -92,10 +68,5 @@ The administrator only needs:
 
 ## Updating the app later
 
-Yes, you can absolutely keep modifying the app after this.
+will update later to include Xenium.
 
-- Change code in this repository
-- Rebuild the container image
-- Restart the container
-
-The data can stay mounted in the same host directory, so code updates do not require rebundling the large Seurat objects every time.
