@@ -1,0 +1,44 @@
+body {
+  background: linear-gradient(180deg, #f6fbff 0%, #ffffff 100%);
+}
+
+.card {
+  border-radius: 14px;
+  border: 1px solid #dbe8f0;
+  box-shadow: 0 10px 30px rgba(40, 76, 92, 0.06);
+}
+
+.sidebar {
+  background: #f3f9fc;
+}
+
+.small-note {
+  color: #4f6b78;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.shiny-bound-output.recalculating,
+.html-widget-output.recalculating,
+.datatables.recalculating {
+  position: relative;
+}
+
+.shiny-bound-output.recalculating::after,
+.html-widget-output.recalculating::after,
+.datatables.recalculating::after {
+  content: "Loading...";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe8f0;
+  color: #1f5d7a;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(40, 76, 92, 0.08);
+  z-index: 10;
+}

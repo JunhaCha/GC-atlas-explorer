@@ -1,0 +1,11 @@
+services:
+  gc-singlecell-explorer:
+    build: .
+    container_name: gc-singlecell-explorer
+    ports:
+      - "3838:3838"
+    environment:
+      GC_APP_DATA_DIR: /data
+    volumes:
+      - ${GC_APP_HOST_DATA_DIR:-/srv/gc-explorer-data}:/data:ro
+    restart: unless-stopped
