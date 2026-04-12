@@ -48,6 +48,243 @@ xenium_object_choices_default <- function() {
   c("Xenium object not configured yet" = "")
 }
 
+xenium_app_inputs_dir <- function() {
+  candidates <- c(
+    app_data_path("atlas_app_inputs"),
+    app_data_dir()
+  )
+  candidates <- unique(candidates[file.exists(candidates) | dir.exists(candidates)])
+
+  manifest_hits <- candidates[file.exists(file.path(candidates, "export_manifest.tsv"))]
+  if (length(manifest_hits) > 0) {
+    return(normalizePath(manifest_hits[[1]], winslash = "/", mustWork = FALSE))
+  }
+
+  normalizePath(candidates[[1]] %||% app_data_path("atlas_app_inputs"), winslash = "/", mustWork = FALSE)
+}
+
+xenium_manifest_path <- function() {
+  normalizePath(file.path(xenium_app_inputs_dir(), "export_manifest.tsv"), winslash = "/", mustWork = FALSE)
+}
+
+xenium_curated_gene_list_path <- function() {
+  normalizePath(
+    file.path(app_code_dir(), "config", "xenium_curated_gene_list.csv"),
+    winslash = "/",
+    mustWork = FALSE
+  )
+}
+
+xenium_curated_gene_table <- function() {
+  path <- xenium_curated_gene_list_path()
+  if (!file.exists(path)) {
+    stop(paste0("Xenium curated gene list not found at ", path, "."), call. = FALSE)
+  }
+
+  utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+}
+
+xenium_curated_genes <- function() {
+  unique(xenium_curated_gene_table()$gene)
+}
+
+xenium_counts_matrix_path <- function(sample_id) {
+  normalizePath(
+    file.path(xenium_app_inputs_dir(), sample_id, paste0(sample_id, "_counts_sce.rds")),
+    winslash = "/",
+    mustWork = FALSE
+  )
+}
+
+xenium_sample_manifest <- function() {
+  manifest_path <- xenium_manifest_path()
+  if (!file.exists(manifest_path)) {
+    stop(paste0("Xenium manifest not found at ", manifest_path, "."), call. = FALSE)
+  }
+
+  manifest <- utils::read.delim(
+    manifest_path,
+    sep = "\t",
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  if (!("sample_id" %in% colnames(manifest))) {
+    stop("Xenium manifest must contain a 'sample_id' column.", call. = FALSE)
+  }
+
+  path_fields <- c(
+    "cells_file",
+    "image_file",
+    "image_meta_json",
+    "image_meta_rds",
+    "neighborhood_summary_file",
+    "neighborhood_composition_file"
+  )
+
+  root_dir <- dirname(manifest_path)
+  for (field in intersect(path_fields, colnames(manifest))) {
+    manifest[[field]] <- normalizePath(
+      file.path(root_dir, manifest$sample_id, manifest[[field]]),
+      winslash = "/",
+      mustWork = FALSE
+    )
+  }
+
+  manifest
+}
+
+xenium_sample_choices <- function(manifest = xenium_sample_manifest()) {
+  stats::setNames(manifest$sample_id, manifest$sample_id)
+}
+
+xenium_manifest_row <- function(sample_id, manifest = xenium_sample_manifest()) {
+  if (is.null(sample_id) || !nzchar(sample_id)) {
+    stop("Choose a Xenium sample.", call. = FALSE)
+  }
+  row <- manifest[manifest$sample_id %in% sample_id, , drop = FALSE]
+  if (nrow(row) != 1) {
+    stop(paste0("Sample '", sample_id, "' was not found in the Xenium manifest."), call. = FALSE)
+  }
+  row[1, , drop = FALSE]
+}
+
+xenium_image_meta <- function(sample_row) {
+  meta_path <- sample_row$image_meta_rds[[1]] %||% ""
+  if (!file.exists(meta_path)) {
+    stop(paste0("Image metadata file was not found for sample ", sample_row$sample_id[[1]], "."), call. = FALSE)
+  }
+  readRDS(meta_path)
+}
+
+xenium_transform_cells <- function(cells_df, image_meta) {
+  if (!all(c("x", "y") %in% colnames(cells_df))) {
+    stop("Xenium cell table must contain x and y columns.", call. = FALSE)
+  }
+
+  x_range <- as.numeric(image_meta$x_range %||% c(min(cells_df$x, na.rm = TRUE), max(cells_df$x, na.rm = TRUE)))
+  y_range <- as.numeric(image_meta$y_range %||% c(min(cells_df$y, na.rm = TRUE), max(cells_df$y, na.rm = TRUE)))
+  display_width <- as.numeric(image_meta$displayed_width %||% image_meta$original_width %||% 1)
+  display_height <- as.numeric(image_meta$displayed_height %||% image_meta$original_height %||% 1)
+
+  x_span <- diff(x_range)
+  y_span <- diff(y_range)
+  if (!is.finite(x_span) || x_span == 0) {
+    x_span <- 1
+  }
+  if (!is.finite(y_span) || y_span == 0) {
+    y_span <- 1
+  }
+
+  x_scaled <- (as.numeric(cells_df$x) - x_range[[1]]) / x_span * display_width
+  y_scaled <- (as.numeric(cells_df$y) - y_range[[1]]) / y_span * display_height
+
+  if (isTRUE(image_meta$flip_y %||% FALSE)) {
+    y_scaled <- display_height - y_scaled
+  }
+
+  dplyr::mutate(
+    cells_df,
+    x_plot = pmin(pmax(x_scaled, 0), display_width),
+    y_plot = pmin(pmax(y_scaled, 0), display_height)
+  )
+}
+
+xenium_sample_bundle <- function(sample_id, manifest = xenium_sample_manifest()) {
+  sample_row <- xenium_manifest_row(sample_id, manifest)
+
+  cells_path <- sample_row$cells_file[[1]] %||% ""
+  image_path <- sample_row$image_file[[1]] %||% ""
+  summary_path <- sample_row$neighborhood_summary_file[[1]] %||% ""
+  composition_path <- sample_row$neighborhood_composition_file[[1]] %||% ""
+
+  if (!file.exists(cells_path)) {
+    stop(paste0("Cell table was not found for sample ", sample_id, "."), call. = FALSE)
+  }
+  if (!file.exists(image_path)) {
+    stop(paste0("Background image was not found for sample ", sample_id, "."), call. = FALSE)
+  }
+  if (!file.exists(summary_path)) {
+    stop(paste0("Neighborhood summary was not found for sample ", sample_id, "."), call. = FALSE)
+  }
+  if (!file.exists(composition_path)) {
+    stop(paste0("Neighborhood composition was not found for sample ", sample_id, "."), call. = FALSE)
+  }
+
+  image_meta <- xenium_image_meta(sample_row)
+  cells_df <- xenium_transform_cells(readRDS(cells_path), image_meta)
+
+  list(
+    sample_id = sample_id,
+    manifest_row = sample_row,
+    cells = cells_df,
+    image_path = image_path,
+    image_meta = image_meta,
+    neighborhood_summary = readRDS(summary_path),
+    neighborhood_composition = readRDS(composition_path)
+  )
+}
+
+xenium_marker_dir <- function(sample_id) {
+  normalizePath(
+    file.path(xenium_app_inputs_dir(), sample_id, "marker_expr"),
+    winslash = "/",
+    mustWork = FALSE
+  )
+}
+
+xenium_marker_manifest_path <- function(sample_id) {
+  normalizePath(
+    file.path(xenium_marker_dir(sample_id), "marker_genes.rds"),
+    winslash = "/",
+    mustWork = FALSE
+  )
+}
+
+xenium_marker_manifest <- function(sample_id) {
+  path <- xenium_marker_manifest_path(sample_id)
+  if (!file.exists(path)) {
+    stop(
+      paste0(
+        "Marker assets were not found for sample ",
+        sample_id,
+        ". Run ",
+        app_script_path("build_xenium_marker_assets.R"),
+        " first."
+      ),
+      call. = FALSE
+    )
+  }
+  readRDS(path)
+}
+
+xenium_marker_available_genes <- function(sample_id) {
+  xenium_marker_manifest(sample_id)$gene
+}
+
+xenium_marker_expression_path <- function(sample_id, gene) {
+  manifest <- xenium_marker_manifest(sample_id)
+  row <- manifest[manifest$gene %in% gene, , drop = FALSE]
+  if (nrow(row) != 1) {
+    stop(paste0("Gene '", gene, "' is not available for sample ", sample_id, "."), call. = FALSE)
+  }
+  normalizePath(file.path(xenium_marker_dir(sample_id), row$file_name[[1]]), winslash = "/", mustWork = FALSE)
+}
+
+xenium_read_marker_expression <- function(bundle, gene) {
+  expr_path <- xenium_marker_expression_path(bundle$sample_id, gene)
+  marker_obj <- readRDS(expr_path)
+
+  n_cells <- nrow(bundle$cells)
+  values <- numeric(n_cells)
+
+  if (length(marker_obj$index) > 0) {
+    values[marker_obj$index] <- marker_obj$value
+  }
+
+  values
+}
+
 color_rds_paths <- c(
   dataset = app_data_path("dataset_group_colors.rds"),
   path_group = app_data_path("path_group_colors.rds"),
@@ -395,6 +632,303 @@ plot_harmony_umap <- function(obj, color_mode, label = TRUE, pt_size = 0.4) {
   }
 
   p
+}
+
+xenium_color_labels <- c(
+  celltype = "Cell Type",
+  subtype = "Subtype / State",
+  tumor_normal = "Tumor / Normal",
+  neighborhood = "Neighborhood"
+)
+
+xenium_palette_for_var <- function(var_name, values) {
+  values_chr <- unique(as.character(values))
+  values_chr <- values_chr[!is.na(values_chr) & nzchar(values_chr)]
+
+  if (length(values_chr) == 0) {
+    return(setNames(character(0), character(0)))
+  }
+
+  if (identical(var_name, "celltype")) {
+    return(palette_for_values(values_chr, load_named_palette("celltype")))
+  }
+
+  if (identical(var_name, "tumor_normal")) {
+    base <- c(
+      "Normal" = "#2CA25F",
+      "Tumor" = "#D1495B"
+    )
+    return(palette_for_values(values_chr, base))
+  }
+
+  if (identical(var_name, "neighborhood")) {
+    return(named_palette(values_chr, brewer_name = "Set2"))
+  }
+
+  named_palette(values_chr, brewer_name = "Set3")
+}
+
+xenium_image_is_plot_asset <- function(bundle) {
+  source_image <- basename(bundle$image_meta$source_image %||% bundle$image_path %||% "")
+  grepl("imagedimplot", source_image, ignore.case = TRUE)
+}
+
+xenium_sample_summary <- function(bundle) {
+  tibble::tibble(
+    metric = c(
+      "Sample ID",
+      "Cells",
+      "Cell Types",
+      "Neighborhoods",
+      "Image Width",
+      "Image Height"
+    ),
+    value = c(
+      bundle$sample_id,
+      format(nrow(bundle$cells), big.mark = ","),
+      format(dplyr::n_distinct(bundle$cells$celltype), big.mark = ","),
+      format(dplyr::n_distinct(bundle$cells$neighborhood), big.mark = ","),
+      bundle$image_meta$displayed_width %||% bundle$image_meta$original_width %||% NA,
+      bundle$image_meta$displayed_height %||% bundle$image_meta$original_height %||% NA
+    )
+  )
+}
+
+xenium_count_table <- function(cells_df, field) {
+  validate(need(field %in% colnames(cells_df), paste0("'", field, "' is missing from the Xenium cell table.")))
+
+  cells_df |>
+    dplyr::count(.data[[field]], name = "n_cells", sort = TRUE) |>
+    dplyr::mutate(
+      fraction = n_cells / sum(n_cells),
+      fraction = sprintf("%.1f%%", fraction * 100)
+    ) |>
+    dplyr::rename(category = 1)
+}
+
+xenium_overview_barplot <- function(cells_df, field, title) {
+  count_df <- xenium_count_table(cells_df, field)
+  count_df$category <- factor(count_df$category, levels = rev(count_df$category))
+
+  ggplot(count_df, aes(x = category, y = n_cells, fill = category)) +
+    geom_col(width = 0.8, show.legend = FALSE) +
+    coord_flip() +
+    scale_fill_manual(values = xenium_palette_for_var(field, as.character(count_df$category))) +
+    labs(x = NULL, y = "Cells", title = title) +
+    theme_minimal(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+
+plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 0.45, alpha = 0.8, highlight_celltypes = character(0)) {
+  validate(need(color_by %in% colnames(bundle$cells), paste0("'", color_by, "' is not available for Xenium coloring.")))
+
+  plot_df <- bundle$cells |>
+    dplyr::mutate(color_value = as.character(.data[[color_by]]))
+
+  plot_df$color_value[is.na(plot_df$color_value) | !nzchar(plot_df$color_value)] <- "NA"
+  highlight_celltypes <- unique(as.character(highlight_celltypes))
+  highlight_celltypes <- highlight_celltypes[nzchar(highlight_celltypes) & !is.na(highlight_celltypes)]
+
+  use_highlight_mode <- length(highlight_celltypes) > 0
+  if (use_highlight_mode) {
+    first_label <- highlight_celltypes[[1]]
+    second_label <- highlight_celltypes[[2]] %||% NULL
+
+    plot_df$plot_group <- "Other cells"
+    plot_df$plot_group[plot_df$celltype %in% first_label] <- first_label
+    if (!is.null(second_label) && !identical(second_label, first_label)) {
+      plot_df$plot_group[plot_df$celltype %in% second_label] <- second_label
+    }
+
+    color_levels <- c("Other cells", first_label)
+    color_values <- c(
+      "Other cells" = "#C9CED6",
+      stats::setNames("#2C7BE5", first_label)
+    )
+
+    if (!is.null(second_label) && !identical(second_label, first_label)) {
+      color_levels <- c(color_levels, second_label)
+      color_values <- c(color_values, stats::setNames("#D1495B", second_label))
+    }
+
+    plot_df$plot_group <- factor(plot_df$plot_group, levels = color_levels)
+  } else {
+    color_values <- xenium_palette_for_var(color_by, plot_df$color_value)
+    plot_df$plot_group <- factor(plot_df$color_value, levels = names(color_values))
+  }
+
+  width <- as.numeric(bundle$image_meta$displayed_width %||% bundle$image_meta$original_width %||% max(plot_df$x_plot, na.rm = TRUE))
+  height <- as.numeric(bundle$image_meta$displayed_height %||% bundle$image_meta$original_height %||% max(plot_df$y_plot, na.rm = TRUE))
+
+  p <- ggplot()
+
+  if (!xenium_image_is_plot_asset(bundle)) {
+    validate(need(requireNamespace("png", quietly = TRUE), "Install the 'png' package to display Xenium background images."))
+    img <- png::readPNG(bundle$image_path)
+    p <- p + annotation_raster(img, xmin = 0, xmax = width, ymin = 0, ymax = height)
+  }
+
+  background_df <- plot_df[as.character(plot_df$plot_group) %in% "Other cells", , drop = FALSE]
+  focus_df <- plot_df[!(as.character(plot_df$plot_group) %in% "Other cells"), , drop = FALSE]
+
+  p +
+    {
+      if (nrow(background_df) > 0) {
+        geom_point(
+          data = background_df,
+          aes(x = x_plot, y = y_plot, color = plot_group),
+          size = point_size,
+          alpha = if (use_highlight_mode) min(alpha, 0.25) else alpha,
+          shape = 16
+        )
+      }
+    } +
+    {
+      if (nrow(focus_df) > 0) {
+        geom_point(
+          data = focus_df,
+          aes(x = x_plot, y = y_plot, color = plot_group),
+          size = if (use_highlight_mode) point_size * 1.1 else point_size,
+          alpha = alpha,
+          shape = 16
+        )
+      }
+    } +
+    scale_color_manual(values = color_values, na.value = "#9AA5B1") +
+    coord_fixed(xlim = c(0, width), ylim = c(0, height), expand = FALSE) +
+    labs(color = if (use_highlight_mode) "Highlighted cell types" else (xenium_color_labels[[color_by]] %||% color_by)) +
+    theme_void(base_size = 12) +
+    theme(
+      panel.background = element_rect(
+        fill = if (xenium_image_is_plot_asset(bundle)) "#FBFCFD" else NA,
+        color = NA
+      ),
+      legend.position = "right",
+      legend.title = element_text(face = "bold")
+    ) +
+    guides(color = guide_legend(override.aes = list(size = 5.5, alpha = 1)))
+}
+
+plot_xenium_neighborhood_abundance <- function(neighborhood_summary) {
+  validate(need(nrow(neighborhood_summary) > 0, "Neighborhood summary is empty for this sample."))
+
+  plot_df <- neighborhood_summary |>
+    dplyr::arrange(dplyr::desc(fraction)) |>
+    dplyr::mutate(neighborhood = factor(neighborhood, levels = rev(unique(neighborhood))))
+
+  ggplot(plot_df, aes(x = neighborhood, y = fraction, fill = neighborhood)) +
+    geom_col(width = 0.8, show.legend = FALSE) +
+    coord_flip() +
+    scale_fill_manual(values = xenium_palette_for_var("neighborhood", as.character(plot_df$neighborhood))) +
+    scale_y_continuous(labels = function(x) sprintf("%d%%", round(x * 100))) +
+    labs(x = NULL, y = "Fraction of cells", title = "Neighborhood abundance") +
+    theme_minimal(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+
+plot_xenium_neighborhood_composition <- function(neighborhood_composition, neighborhood_summary = NULL) {
+  validate(need(nrow(neighborhood_composition) > 0, "Neighborhood composition is empty for this sample."))
+
+  plot_df <- neighborhood_composition
+
+  neighborhood_levels <- if (!is.null(neighborhood_summary) && nrow(neighborhood_summary) > 0) {
+    neighborhood_summary |>
+      dplyr::arrange(dplyr::desc(fraction)) |>
+      dplyr::pull(neighborhood) |>
+      unique()
+  } else {
+    unique(plot_df$neighborhood)
+  }
+
+  celltype_levels <- plot_df |>
+    dplyr::group_by(celltype) |>
+    dplyr::summarise(total_fraction = sum(fraction, na.rm = TRUE), .groups = "drop") |>
+    dplyr::arrange(dplyr::desc(total_fraction)) |>
+    dplyr::pull(celltype)
+
+  plot_df$neighborhood <- factor(plot_df$neighborhood, levels = rev(neighborhood_levels))
+  plot_df$celltype <- factor(plot_df$celltype, levels = celltype_levels)
+
+  ggplot(plot_df, aes(x = celltype, y = neighborhood, fill = fraction)) +
+    geom_tile(color = "white", linewidth = 0.2) +
+    scale_fill_viridis_c(option = "C", labels = function(x) sprintf("%d%%", round(x * 100))) +
+    labs(x = NULL, y = NULL, fill = "Fraction", title = "Neighborhood composition by cell type") +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(face = "bold")
+    )
+}
+
+plot_xenium_marker_overlay <- function(bundle, gene, point_size = 0.45, alpha = 0.8) {
+  expr <- xenium_read_marker_expression(bundle, gene)
+  plot_df <- bundle$cells
+  plot_df$expr <- as.numeric(expr)
+  plot_df$expr_plot <- log1p(plot_df$expr)
+
+  width <- as.numeric(bundle$image_meta$displayed_width %||% bundle$image_meta$original_width %||% max(plot_df$x_plot, na.rm = TRUE))
+  height <- as.numeric(bundle$image_meta$displayed_height %||% bundle$image_meta$original_height %||% max(plot_df$y_plot, na.rm = TRUE))
+
+  p <- ggplot()
+
+  if (!xenium_image_is_plot_asset(bundle)) {
+    validate(need(requireNamespace("png", quietly = TRUE), "Install the 'png' package to display Xenium background images."))
+    img <- png::readPNG(bundle$image_path)
+    p <- p + annotation_raster(img, xmin = 0, xmax = width, ymin = 0, ymax = height)
+  }
+
+  zero_df <- plot_df[plot_df$expr_plot <= 0 | is.na(plot_df$expr_plot), , drop = FALSE]
+  nonzero_df <- plot_df[plot_df$expr_plot > 0 & !is.na(plot_df$expr_plot), , drop = FALSE]
+  if (nrow(nonzero_df) > 0) {
+    nonzero_df <- nonzero_df[order(nonzero_df$expr_plot), , drop = FALSE]
+  }
+
+  p +
+    {
+      if (nrow(zero_df) > 0) {
+        geom_point(
+          data = zero_df,
+          aes(x = x_plot, y = y_plot),
+          color = "grey82",
+          size = point_size,
+          alpha = min(alpha, 0.35),
+          shape = 16
+        )
+      }
+    } +
+    {
+      if (nrow(nonzero_df) > 0) {
+        geom_point(
+          data = nonzero_df,
+          aes(x = x_plot, y = y_plot, color = expr_plot),
+          size = point_size,
+          alpha = alpha,
+          shape = 16
+        )
+      }
+    } +
+    scale_color_gradientn(colors = viridisLite::plasma(256), name = "log1p(count)") +
+    coord_fixed(xlim = c(0, width), ylim = c(0, height), expand = FALSE) +
+    labs(title = gene) +
+    theme_void(base_size = 12) +
+    theme(
+      panel.background = element_rect(
+        fill = if (xenium_image_is_plot_asset(bundle)) "#FBFCFD" else NA,
+        color = NA
+      ),
+      plot.title = element_text(face = "bold", hjust = 0.02),
+      legend.position = "right",
+      legend.title = element_text(face = "bold")
+    )
 }
 
 plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, ylim = NULL) {

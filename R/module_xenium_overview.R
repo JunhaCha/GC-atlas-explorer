@@ -1,0 +1,74 @@
+xenium_overview_ui <- function(id) {
+  ns <- NS(id)
+
+  fluidPage(
+    fluidRow(
+      column(
+        width = 4,
+        card(
+          card_header("Sample Summary"),
+          tableOutput(ns("summary_table"))
+        )
+      ),
+      column(
+        width = 4,
+        card(
+          card_header("Cell Type Counts"),
+          dataTableOutput(ns("celltype_table"))
+        )
+      ),
+      column(
+        width = 4,
+        card(
+          card_header("Neighborhood Counts"),
+          dataTableOutput(ns("neighborhood_table"))
+        )
+      )
+    ),
+    fluidRow(
+      column(
+        width = 6,
+        card(
+          card_header("Cells by Cell Type"),
+          plotOutput(ns("celltype_plot"), height = 360)
+        )
+      ),
+      column(
+        width = 6,
+        card(
+          card_header("Cells by Neighborhood"),
+          plotOutput(ns("neighborhood_plot"), height = 360)
+        )
+      )
+    )
+  )
+}
+
+xenium_overview_server <- function(id, loaded) {
+  moduleServer(id, function(input, output, session) {
+    bundle <- reactive({
+      req(loaded()$bundle)
+      loaded()$bundle
+    })
+
+    output$summary_table <- renderTable({
+      xenium_sample_summary(bundle())
+    }, rownames = FALSE, colnames = FALSE)
+
+    output$celltype_table <- renderDataTable({
+      xenium_count_table(bundle()$cells, "celltype")
+    }, options = list(scrollX = TRUE, pageLength = 10))
+
+    output$neighborhood_table <- renderDataTable({
+      xenium_count_table(bundle()$cells, "neighborhood")
+    }, options = list(scrollX = TRUE, pageLength = 10))
+
+    output$celltype_plot <- renderPlot({
+      xenium_overview_barplot(bundle()$cells, "celltype", "Cells by cell type")
+    })
+
+    output$neighborhood_plot <- renderPlot({
+      xenium_overview_barplot(bundle()$cells, "neighborhood", "Cells by neighborhood")
+    })
+  })
+}

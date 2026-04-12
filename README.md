@@ -1,6 +1,6 @@
 # Gastric Cancer single-cell Explorer
 
-Shiny app for exploring gastric cancer single-cell Seurat objects, precomputed marker tables, average-expression caches, and malignant-vs-normal quadrant DEG plots.
+Shiny app for exploring gastric cancer single-cell atlas objects plus lightweight Xenium spatial exports, precomputed marker tables, average-expression caches, and malignant-vs-normal quadrant DEG plots.
 
 ## Runtime layout
 
@@ -29,12 +29,30 @@ Place these in the data directory mounted into the container or available on the
 - `subcluster_ct_colors_combined.rds`
 - `markers_RNA_merged_AllCelltypes_final.xlsx`
 - marker/DE `.xlsx` files for the other atlas objects you want exposed
+- `atlas_app_inputs/export_manifest.tsv`
+- `atlas_app_inputs/<sample_id>/cells.rds`
+- `atlas_app_inputs/<sample_id>/image_lowres.png`
+- `atlas_app_inputs/<sample_id>/image_meta.rds`
+- `atlas_app_inputs/<sample_id>/neighborhood_summary.rds`
+- `atlas_app_inputs/<sample_id>/neighborhood_composition.rds`
+- `atlas_app_inputs/<sample_id>/<sample_id>_counts_sce.rds` if you want to rebuild Xenium marker assets
+- `atlas_app_inputs/<sample_id>/marker_expr/` if you want the Xenium Marker Overlay tab available immediately
+
+Example shared host path used for this project:
+
+- `/mnt/ix1/Projects_lite/junhacha/GCshinyapp_data`
 
 ## Local run
 
 ```bash
-cd /path/to/seurat-shiny-explorer
+cd /path/to/GC-atlas-explorer
 GC_APP_DATA_DIR=/path/to/data R -e "shiny::runApp('.', launch.browser = TRUE)"
+```
+
+For the shared project storage, that becomes:
+
+```bash
+GC_APP_DATA_DIR=/mnt/ix1/Projects_lite/junhacha/GCshinyapp_data R -e "shiny::runApp('.', launch.browser = TRUE)"
 ```
 
 ## Docker run
@@ -60,7 +78,7 @@ Then open:
 
 ## Docker Compose
 
-Example file is included at [docker-compose.yml](/Users/junhacha/Documents/Playground/seurat-shiny-explorer/docker-compose.yml).
+Example file is included at [docker-compose.yml](/Users/junhacha/Documents/Playground/GC-atlas-explorer/docker-compose.yml).
 
 Set the host data path in `.env`:
 
