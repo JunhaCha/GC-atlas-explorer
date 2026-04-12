@@ -24,6 +24,7 @@ RUN install2.r --error --skipinstalled \
     bslib \
     dplyr \
     ggplot2 \
+    png \
     viridisLite \
     pheatmap \
     readxl \
