@@ -157,6 +157,46 @@ xenium_image_meta <- function(sample_row) {
   readRDS(meta_path)
 }
 
+read_xenium_table_file <- function(path) {
+  ext <- tolower(tools::file_ext(path %||% ""))
+
+  fallback_path <- function(new_ext) {
+    sub(paste0("\\.", ext, "$"), paste0(".", new_ext), path, ignore.case = TRUE)
+  }
+
+  if (identical(ext, "rds")) {
+    return(readRDS(path))
+  }
+
+  if (identical(ext, "qs")) {
+    if (requireNamespace("qs", quietly = TRUE)) {
+      return(qs::qread(path))
+    }
+
+    alt_rds <- fallback_path("rds")
+    if (file.exists(alt_rds)) {
+      return(readRDS(alt_rds))
+    }
+
+    stop("Install the 'qs' package to read Xenium .qs tables, or provide matching .rds fallbacks.", call. = FALSE)
+  }
+
+  if (identical(ext, "parquet")) {
+    if (requireNamespace("arrow", quietly = TRUE)) {
+      return(as.data.frame(arrow::read_parquet(path), stringsAsFactors = FALSE))
+    }
+
+    alt_rds <- fallback_path("rds")
+    if (file.exists(alt_rds)) {
+      return(readRDS(alt_rds))
+    }
+
+    stop("Install the 'arrow' package to read Xenium .parquet tables, or provide matching .rds fallbacks.", call. = FALSE)
+  }
+
+  stop(paste0("Unsupported Xenium table format: ", path), call. = FALSE)
+}
+
 xenium_transform_cells <- function(cells_df, image_meta) {
   if (!all(c("x", "y") %in% colnames(cells_df))) {
     stop("Xenium cell table must contain x and y columns.", call. = FALSE)
@@ -212,7 +252,7 @@ xenium_sample_bundle <- function(sample_id, manifest = xenium_sample_manifest())
   }
 
   image_meta <- xenium_image_meta(sample_row)
-  cells_df <- xenium_transform_cells(readRDS(cells_path), image_meta)
+  cells_df <- xenium_transform_cells(read_xenium_table_file(cells_path), image_meta)
 
   list(
     sample_id = sample_id,
@@ -220,8 +260,8 @@ xenium_sample_bundle <- function(sample_id, manifest = xenium_sample_manifest())
     cells = cells_df,
     image_path = image_path,
     image_meta = image_meta,
-    neighborhood_summary = readRDS(summary_path),
-    neighborhood_composition = readRDS(composition_path)
+    neighborhood_summary = read_xenium_table_file(summary_path),
+    neighborhood_composition = read_xenium_table_file(composition_path)
   )
 }
 
