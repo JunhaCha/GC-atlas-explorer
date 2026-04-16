@@ -1,17 +1,39 @@
 #!/usr/bin/env Rscript
 
-atlas_paths <- c(
-  "/Users/junhacha/Documents/Playground/seurat_merged_TME_malignant_final_umap.rds",
-  "/Users/junhacha/Documents/Playground/seurat_epithelial_normal_final_final.rds",
-  "/Users/junhacha/Documents/Playground/seurat_cancercells_final.rds",
-  "/Users/junhacha/Documents/Playground/seurat_Stromal_final.rds",
-  "/Users/junhacha/Documents/Playground/seurat_CD8T_final2.rds",
-  "/Users/junhacha/Documents/Playground/seurat_CD4T_final2.rds",
-  "/Users/junhacha/Documents/Playground/seurat_B_final2.rds",
-  "/Users/junhacha/Documents/Playground/seurat_Mye_final2.rds"
+script_path <- normalizePath(
+  sub("^--file=", "", grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]),
+  winslash = "/",
+  mustWork = FALSE
 )
+repo_dir <- dirname(script_path)
 
-slim_script <- "/Users/junhacha/Documents/Playground/seurat-shiny-explorer/slim_seurat_for_app.R"
+app_data_dir <- function() {
+  env_dir <- Sys.getenv("GC_APP_DATA_DIR", unset = "")
+  if (nzchar(env_dir)) {
+    return(normalizePath(env_dir, winslash = "/", mustWork = FALSE))
+  }
+
+  local_data_dir <- file.path(repo_dir, "data")
+  if (dir.exists(local_data_dir)) {
+    return(normalizePath(local_data_dir, winslash = "/", mustWork = FALSE))
+  }
+
+  normalizePath(dirname(repo_dir), winslash = "/", mustWork = FALSE)
+}
+
+atlas_filenames <- c(
+  "seurat_merged_TME_malignant_final_umap.rds",
+  "seurat_epithelial_normal_final_final.rds",
+  "seurat_cancercells_final.rds",
+  "seurat_Stromal_final.rds",
+  "seurat_CD8T_final2.rds",
+  "seurat_CD4T_final2.rds",
+  "seurat_B_final2.rds",
+  "seurat_Mye_final2.rds"
+)
+atlas_paths <- file.path(app_data_dir(), atlas_filenames)
+
+slim_script <- file.path(repo_dir, "slim_seurat_for_app.R")
 
 for (input_path in atlas_paths) {
   if (!file.exists(input_path)) {

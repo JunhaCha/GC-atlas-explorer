@@ -20,7 +20,13 @@ if (is.null(input_path) || is.null(output_path)) {
   stop("Usage: Rscript build_quadrant_cache_for_app.R --input input.rds --output output_quadrant_cache.rds [--slot data] [--celltype-col final_celltype] [--group-col final_group]")
 }
 
-source("/Users/junhacha/Documents/Playground/seurat-shiny-explorer/R/helpers.R")
+script_path <- normalizePath(
+  sub("^--file=", "", grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]),
+  winslash = "/",
+  mustWork = FALSE
+)
+repo_dir <- dirname(script_path)
+source(file.path(repo_dir, "R", "helpers.R"))
 
 message("Reading Seurat object: ", input_path)
 obj <- readRDS(input_path)

@@ -68,7 +68,7 @@ Run:
 ```bash
 docker run --rm -p 3838:3838 \
   -e GC_APP_DATA_DIR=/data \
-  -v /srv/gc-explorer-data:/data:ro \
+  -v /mnt/ix1/Projects_lite/junhacha/GCshinyapp_data:/data:ro \
   gc-singlecell-explorer
 ```
 
@@ -89,7 +89,7 @@ cp .env.example .env
 Then edit:
 
 ```bash
-GC_APP_HOST_DATA_DIR=/srv/gc-explorer-data
+GC_APP_HOST_DATA_DIR=/mnt/ix1/Projects_lite/junhacha/GCshinyapp_data
 ```
 
 Start:
