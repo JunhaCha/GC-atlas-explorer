@@ -34,7 +34,7 @@ xenium_spatial_server <- function(id, loaded) {
     })
 
     observeEvent(bundle(), {
-      available_fields <- c("celltype", "subtype", "tumor_normal", "neighborhood")
+      available_fields <- c("celltype", "tumor_normal", "neighborhood")
       available_fields <- available_fields[available_fields %in% colnames(bundle()$cells)]
       choices <- stats::setNames(available_fields, xenium_color_labels[available_fields] %||% available_fields)
       celltype_choices <- sort(unique(as.character(bundle()$cells$celltype)))

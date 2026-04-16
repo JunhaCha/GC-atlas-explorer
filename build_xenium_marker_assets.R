@@ -10,7 +10,7 @@ safe_file_stub <- function(x) {
   gsub("[^A-Za-z0-9._-]", "_", x)
 }
 
-build_sample_marker_assets <- function(sample_id, curated_genes) {
+build_sample_marker_assets <- function(sample_id) {
   counts_path <- xenium_counts_matrix_path(sample_id)
   cells_path <- file.path(xenium_app_inputs_dir(), sample_id, "cells.rds")
 
@@ -44,13 +44,17 @@ build_sample_marker_assets <- function(sample_id, curated_genes) {
     mat <- mat[, cell_match, drop = FALSE]
   }
 
-  genes_use <- curated_genes[curated_genes %in% genes_all]
+  genes_use <- genes_all[!is.na(genes_all) & nzchar(genes_all)]
   gene_idx <- match(genes_use, genes_all)
   sub_mat <- mat[gene_idx, , drop = FALSE]
   trip <- Matrix::summary(sub_mat)
 
   out_dir <- xenium_marker_dir(sample_id)
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  old_rds <- list.files(out_dir, pattern = "\\.rds$", full.names = TRUE)
+  if (length(old_rds) > 0) {
+    unlink(old_rds)
+  }
 
   split_rows <- split(seq_len(nrow(trip)), trip$i)
   manifest_rows <- vector("list", length(genes_use))
@@ -98,11 +102,10 @@ build_sample_marker_assets <- function(sample_id, curated_genes) {
 }
 
 main <- function() {
-  curated_genes <- xenium_curated_genes()
   manifest <- xenium_sample_manifest()
 
   for (sample_id in manifest$sample_id) {
-    build_sample_marker_assets(sample_id, curated_genes)
+    build_sample_marker_assets(sample_id)
   }
 
   message("[xenium-markers] Finished building marker assets for all samples.")

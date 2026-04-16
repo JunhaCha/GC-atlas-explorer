@@ -18,7 +18,7 @@ xenium_marker_ui <- function(id) {
           sliderInput(ns("alpha"), "Point alpha", min = 0.1, max = 1, value = 0.8, step = 0.05),
           tags$div(
             class = "small-note",
-            "Loads one curated Xenium marker at a time from the app-ready sparse export."
+            "Loads one Xenium gene at a time from the app-ready sparse export."
           )
         )
       ),
@@ -40,16 +40,23 @@ xenium_marker_server <- function(id, loaded) {
       loaded()$bundle
     })
 
-    observeEvent(bundle(), {
-      genes <- tryCatch(
+    available_genes <- reactive({
+      req(bundle()$sample_id)
+      tryCatch(
         xenium_marker_available_genes(bundle()$sample_id),
         error = function(e) character(0)
       )
+    })
+
+    observeEvent(bundle(), {
+      genes <- available_genes()
 
       default_gene <- if ("MIF" %in% genes) {
         "MIF"
+      } else if (length(genes) > 0) {
+        genes[[1]]
       } else {
-        genes[[1]] %||% character(0)
+        character(0)
       }
 
       updateSelectizeInput(
@@ -62,6 +69,13 @@ xenium_marker_server <- function(id, loaded) {
     }, ignoreInit = FALSE)
 
     output$marker_plot <- renderPlot({
+      validate(need(length(available_genes()) > 0, paste0(
+        "Marker assets are not available for sample ",
+        bundle()$sample_id,
+        ". Rebuild them with ",
+        app_script_path("build_xenium_marker_assets.R"),
+        "."
+      )))
       req(input$gene, nzchar(input$gene))
       plot_xenium_marker_overlay(
         bundle = bundle(),

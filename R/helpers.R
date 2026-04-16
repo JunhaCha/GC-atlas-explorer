@@ -676,7 +676,6 @@ plot_harmony_umap <- function(obj, color_mode, label = TRUE, pt_size = 0.4) {
 
 xenium_color_labels <- c(
   celltype = "Cell Type",
-  subtype = "Subtype / State",
   tumor_normal = "Tumor / Normal",
   neighborhood = "Neighborhood"
 )
