@@ -35,6 +35,8 @@ xenium_marker_ui <- function(id) {
 
 xenium_marker_server <- function(id, loaded) {
   moduleServer(id, function(input, output, session) {
+    chosen_gene <- reactiveVal(NULL)
+
     bundle <- reactive({
       req(loaded()$bundle)
       loaded()$bundle
@@ -48,13 +50,22 @@ xenium_marker_server <- function(id, loaded) {
       )
     })
 
+    observeEvent(input$gene, {
+      if (is.null(input$gene)) {
+        return()
+      }
+      chosen_gene(input$gene)
+    }, ignoreInit = FALSE)
+
     observeEvent(bundle(), {
       genes <- available_genes()
-
-      default_gene <- if ("MIF" %in% genes) {
-        "MIF"
-      } else if (length(genes) > 0) {
-        genes[[1]]
+      remembered_gene <- chosen_gene() %||% character(0)
+      selected_gene <- if (
+        length(remembered_gene) == 1 &&
+        nzchar(remembered_gene) &&
+        remembered_gene %in% genes
+      ) {
+        remembered_gene
       } else {
         character(0)
       }
@@ -63,7 +74,7 @@ xenium_marker_server <- function(id, loaded) {
         session,
         "gene",
         choices = genes,
-        selected = default_gene,
+        selected = selected_gene,
         server = FALSE
       )
     }, ignoreInit = FALSE)
