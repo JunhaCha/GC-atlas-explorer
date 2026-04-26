@@ -75,6 +75,40 @@ xenium_curated_gene_list_path <- function() {
   )
 }
 
+xenium_sample_labels_path <- function() {
+  normalizePath(
+    file.path(app_code_dir(), "config", "xenium_sample_labels.csv"),
+    winslash = "/",
+    mustWork = FALSE
+  )
+}
+
+xenium_sample_labels <- function() {
+  path <- xenium_sample_labels_path()
+  if (!file.exists(path)) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  labels_df <- utils::read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  required_cols <- c("sample_id", "display_label")
+  if (!all(required_cols %in% colnames(labels_df))) {
+    stop(
+      paste0(
+        "Xenium sample-label file must contain columns: ",
+        paste(required_cols, collapse = ", "),
+        "."
+      ),
+      call. = FALSE
+    )
+  }
+
+  keep <- !is.na(labels_df$sample_id) & nzchar(labels_df$sample_id) &
+    !is.na(labels_df$display_label) & nzchar(labels_df$display_label)
+  labels_df <- labels_df[keep, required_cols, drop = FALSE]
+
+  stats::setNames(labels_df$display_label, labels_df$sample_id)
+}
+
 xenium_curated_gene_table <- function() {
   path <- xenium_curated_gene_list_path()
   if (!file.exists(path)) {
@@ -135,7 +169,30 @@ xenium_sample_manifest <- function() {
 }
 
 xenium_sample_choices <- function(manifest = xenium_sample_manifest()) {
-  stats::setNames(manifest$sample_id, manifest$sample_id)
+  sample_ids <- as.character(manifest$sample_id)
+  label_map <- xenium_sample_labels()
+  display_labels <- unname(label_map[sample_ids])
+  display_labels[is.na(display_labels) | !nzchar(display_labels)] <- sample_ids[is.na(display_labels) | !nzchar(display_labels)]
+
+  parse_group_rank <- function(labels, pattern, rank) {
+    hits <- grepl(pattern, labels)
+    idx <- rep(Inf, length(labels))
+    if (any(hits)) {
+      idx[hits] <- suppressWarnings(as.numeric(sub(pattern, "\\1", labels[hits])))
+    }
+    list(group = ifelse(hits, rank, Inf), order = idx)
+  }
+
+  diffuse <- parse_group_rank(display_labels, "^Diffuse_(\\d+)$", 1)
+  intestinal <- parse_group_rank(display_labels, "^Intestinal_(\\d+)$", 2)
+  normal <- parse_group_rank(display_labels, "^Normal_(\\d+)$", 3)
+
+  group_rank <- pmin(diffuse$group, intestinal$group, normal$group)
+  within_rank <- pmin(diffuse$order, intestinal$order, normal$order)
+  fallback_label <- tolower(display_labels)
+  ord <- order(group_rank, within_rank, fallback_label, sample_ids, na.last = TRUE)
+
+  stats::setNames(sample_ids[ord], display_labels[ord])
 }
 
 xenium_manifest_row <- function(sample_id, manifest = xenium_sample_manifest()) {
