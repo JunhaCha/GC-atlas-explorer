@@ -12,7 +12,9 @@ xenium_spatial_ui <- function(id) {
           selectInput(ns("highlight_a"), "Highlight cell type 1", choices = character(0), selected = ""),
           selectInput(ns("highlight_b"), "Highlight cell type 2", choices = character(0), selected = ""),
           sliderInput(ns("point_size"), "Point size", min = 0.1, max = 2.5, value = 0.5, step = 0.1),
-          sliderInput(ns("alpha"), "Point alpha", min = 0.1, max = 1, value = 0.8, step = 0.05)
+          sliderInput(ns("alpha"), "Point alpha", min = 0.1, max = 1, value = 0.8, step = 0.05),
+          tags$div(style = "height: 0.5rem;"),
+          downloadButton(ns("download_spatial_pdf"), "Export PDF")
         )
       ),
       column(
@@ -65,5 +67,29 @@ xenium_spatial_server <- function(id, loaded) {
         highlight_celltypes = highlight_values
       )
     }, res = 110)
+
+    output$download_spatial_pdf <- downloadHandler(
+      filename = function() {
+        paste0(bundle()$sample_id, "_spatial_map.pdf")
+      },
+      content = function(file) {
+        highlight_values <- character(0)
+        if (isTRUE(input$highlight_mode)) {
+          highlight_values <- c(input$highlight_a %||% "", input$highlight_b %||% "")
+        }
+
+        p <- plot_xenium_spatial_map(
+          bundle = bundle(),
+          color_by = input$color_by %||% "celltype",
+          point_size = input$point_size %||% 0.5,
+          alpha = input$alpha %||% 0.8,
+          highlight_celltypes = highlight_values
+        )
+
+        grDevices::pdf(file = file, width = 11, height = 8.5, onefile = FALSE)
+        on.exit(grDevices::dev.off(), add = TRUE)
+        print(p)
+      }
+    )
   })
 }
