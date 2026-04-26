@@ -87,7 +87,10 @@ xenium_marker_server <- function(id, loaded) {
         app_script_path("build_xenium_marker_assets.R"),
         "."
       )))
-      req(input$gene, nzchar(input$gene))
+      validate(need(
+        !is.null(input$gene) && nzchar(input$gene),
+        "Choose a gene to display the marker overlay."
+      ))
       plot_xenium_marker_overlay(
         bundle = bundle(),
         gene = input$gene,
