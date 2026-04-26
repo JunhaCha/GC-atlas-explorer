@@ -21,7 +21,9 @@ xenium_marker_ui <- function(id) {
             "Loads one Xenium gene at a time from the app-ready sparse export."
           ),
           tags$div(style = "height: 0.5rem;"),
-          downloadButton(ns("download_marker_pdf"), "Export PDF")
+          downloadButton(ns("download_marker_pdf"), "Export PDF"),
+          tags$div(style = "height: 0.5rem;"),
+          downloadButton(ns("download_marker_png"), "Export PNG")
         )
       ),
       column(
@@ -127,6 +129,37 @@ xenium_marker_server <- function(id, loaded) {
         )
 
         grDevices::pdf(file = file, width = 11, height = 8.5, onefile = FALSE)
+        on.exit(grDevices::dev.off(), add = TRUE)
+        print(p)
+      }
+    )
+
+    output$download_marker_png <- downloadHandler(
+      filename = function() {
+        selected_gene <- input$gene %||% "marker"
+        paste0(bundle()$sample_id, "_", selected_gene, "_marker_overlay.png")
+      },
+      content = function(file) {
+        validate(need(length(available_genes()) > 0, paste0(
+          "Marker assets are not available for sample ",
+          bundle()$sample_id,
+          ". Rebuild them with ",
+          app_script_path("build_xenium_marker_assets.R"),
+          "."
+        )))
+        validate(need(
+          !is.null(input$gene) && nzchar(input$gene),
+          "Choose a gene to display the marker overlay."
+        ))
+
+        p <- plot_xenium_marker_overlay(
+          bundle = bundle(),
+          gene = input$gene,
+          point_size = input$point_size %||% 0.5,
+          alpha = input$alpha %||% 0.8
+        )
+
+        grDevices::png(filename = file, width = 3300, height = 2550, res = 300)
         on.exit(grDevices::dev.off(), add = TRUE)
         print(p)
       }

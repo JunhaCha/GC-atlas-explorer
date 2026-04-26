@@ -832,7 +832,7 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
   use_highlight_mode <- length(highlight_celltypes) > 0
   if (use_highlight_mode) {
     first_label <- highlight_celltypes[[1]]
-    second_label <- highlight_celltypes[[2]] %||% NULL
+    second_label <- if (length(highlight_celltypes) >= 2) highlight_celltypes[[2]] else NULL
 
     plot_df$plot_group <- "Other cells"
     plot_df$plot_group[plot_df$celltype %in% first_label] <- first_label

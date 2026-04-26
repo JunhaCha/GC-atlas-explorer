@@ -14,7 +14,9 @@ xenium_spatial_ui <- function(id) {
           sliderInput(ns("point_size"), "Point size", min = 0.1, max = 2.5, value = 0.5, step = 0.1),
           sliderInput(ns("alpha"), "Point alpha", min = 0.1, max = 1, value = 0.8, step = 0.05),
           tags$div(style = "height: 0.5rem;"),
-          downloadButton(ns("download_spatial_pdf"), "Export PDF")
+          downloadButton(ns("download_spatial_pdf"), "Export PDF"),
+          tags$div(style = "height: 0.5rem;"),
+          downloadButton(ns("download_spatial_png"), "Export PNG")
         )
       ),
       column(
@@ -33,6 +35,16 @@ xenium_spatial_server <- function(id, loaded) {
     bundle <- reactive({
       req(loaded()$bundle)
       loaded()$bundle
+    })
+
+    selected_highlight_values <- reactive({
+      if (!isTRUE(input$highlight_mode)) {
+        return(character(0))
+      }
+
+      highlight_values <- c(input$highlight_a %||% "", input$highlight_b %||% "")
+      highlight_values <- unique(as.character(highlight_values))
+      highlight_values[nzchar(highlight_values) & !is.na(highlight_values)]
     })
 
     observeEvent(bundle(), {
@@ -54,10 +66,11 @@ xenium_spatial_server <- function(id, loaded) {
     }, ignoreInit = FALSE)
 
     output$spatial_plot <- renderPlot({
-      highlight_values <- character(0)
-      if (isTRUE(input$highlight_mode)) {
-        highlight_values <- c(input$highlight_a %||% "", input$highlight_b %||% "")
-      }
+      highlight_values <- selected_highlight_values()
+      validate(need(
+        !isTRUE(input$highlight_mode) || length(highlight_values) >= 2,
+        "Choose celltype 1 and celltype 2."
+      ))
 
       plot_xenium_spatial_map(
         bundle = bundle(),
@@ -73,10 +86,11 @@ xenium_spatial_server <- function(id, loaded) {
         paste0(bundle()$sample_id, "_spatial_map.pdf")
       },
       content = function(file) {
-        highlight_values <- character(0)
-        if (isTRUE(input$highlight_mode)) {
-          highlight_values <- c(input$highlight_a %||% "", input$highlight_b %||% "")
-        }
+        highlight_values <- selected_highlight_values()
+        validate(need(
+          !isTRUE(input$highlight_mode) || length(highlight_values) >= 2,
+          "Choose celltype 1 and celltype 2."
+        ))
 
         p <- plot_xenium_spatial_map(
           bundle = bundle(),
@@ -87,6 +101,31 @@ xenium_spatial_server <- function(id, loaded) {
         )
 
         grDevices::pdf(file = file, width = 11, height = 8.5, onefile = FALSE)
+        on.exit(grDevices::dev.off(), add = TRUE)
+        print(p)
+      }
+    )
+
+    output$download_spatial_png <- downloadHandler(
+      filename = function() {
+        paste0(bundle()$sample_id, "_spatial_map.png")
+      },
+      content = function(file) {
+        highlight_values <- selected_highlight_values()
+        validate(need(
+          !isTRUE(input$highlight_mode) || length(highlight_values) >= 2,
+          "Choose celltype 1 and celltype 2."
+        ))
+
+        p <- plot_xenium_spatial_map(
+          bundle = bundle(),
+          color_by = input$color_by %||% "celltype",
+          point_size = input$point_size %||% 0.5,
+          alpha = input$alpha %||% 0.8,
+          highlight_celltypes = highlight_values
+        )
+
+        grDevices::png(filename = file, width = 3300, height = 2550, res = 300)
         on.exit(grDevices::dev.off(), add = TRUE)
         print(p)
       }
