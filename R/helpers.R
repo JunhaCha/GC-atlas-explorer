@@ -457,12 +457,22 @@ matching_quadrant_cache_path <- function(path) {
   if (is.null(path) || !nzchar(path)) {
     return(path)
   }
+  normalized_path <- normalized_source_path_for_mapping(path)
+  if (!is.null(normalized_path) && identical(normalized_path, app_data_path("seurat_cancercells_final.rds"))) {
+    merged_path <- prefer_app_slim_path(app_data_path("seurat_merged_TME_malignant_final_umap.rds"))
+    return(sub("\\.rds$", "_quadrant_cache.rds", merged_path, ignore.case = TRUE))
+  }
   sub("\\.rds$", "_quadrant_cache.rds", path, ignore.case = TRUE)
 }
 
 matching_quadrant_default_pdf_path <- function(path) {
   if (is.null(path) || !nzchar(path)) {
     return(path)
+  }
+  normalized_path <- normalized_source_path_for_mapping(path)
+  if (!is.null(normalized_path) && identical(normalized_path, app_data_path("seurat_cancercells_final.rds"))) {
+    merged_path <- prefer_app_slim_path(app_data_path("seurat_merged_TME_malignant_final_umap.rds"))
+    return(sub("\\.rds$", "_quadrant_default.pdf", merged_path, ignore.case = TRUE))
   }
   sub("\\.rds$", "_quadrant_default.pdf", path, ignore.case = TRUE)
 }
@@ -1438,6 +1448,31 @@ mapped_excel_path <- function(source_path) {
   mapping[[normalized_path]]
 }
 
+normalized_source_path_for_mapping <- function(source_path) {
+  if (is.null(source_path) || !nzchar(source_path)) {
+    return(NULL)
+  }
+  sub("_app_slim\\.rds$", ".rds", source_path, ignore.case = TRUE)
+}
+
+deg_display_mode <- function(source_path) {
+  normalized_path <- normalized_source_path_for_mapping(source_path)
+  if (is.null(normalized_path)) {
+    return("quadrant")
+  }
+
+  special_paths <- c(
+    app_data_path("seurat_merged_TME_malignant_final_umap.rds"),
+    app_data_path("seurat_cancercells_final.rds")
+  )
+
+  if (normalized_path %in% special_paths) {
+    return("quadrant")
+  }
+
+  "diffuse_intestinal"
+}
+
 excel_sheets_safe <- function(path) {
   if (is.null(path) || !file.exists(path)) {
     return(character(0))
@@ -2176,6 +2211,201 @@ read_quadrant_cache <- function(source_path) {
   cache <- readRDS(cache_path)
   validate(need(is.list(cache) && !is.null(cache$fc_tbl), "Quadrant cache file is not in the expected format."))
   cache
+}
+
+matching_diffuse_intestinal_deg_cache_path <- function(source_path) {
+  if (is.null(source_path) || !nzchar(source_path)) {
+    return(NULL)
+  }
+  sub("\\.rds$", "_diffuse_intestinal_deg_cache.rds", source_path, ignore.case = TRUE)
+}
+
+diffuse_intestinal_deg_cache_exists <- function(source_path) {
+  cache_path <- matching_diffuse_intestinal_deg_cache_path(source_path)
+  !is.null(cache_path) && file.exists(cache_path)
+}
+
+read_diffuse_intestinal_deg_cache <- function(source_path) {
+  cache_path <- matching_diffuse_intestinal_deg_cache_path(source_path)
+  validate(need(!is.null(cache_path) && file.exists(cache_path), "Diffuse-vs-Intestinal DEG cache was not found for this object. Build the cache first."))
+  cache <- readRDS(cache_path)
+  validate(need(is.list(cache) && !is.null(cache$deg_table), "Diffuse-vs-Intestinal DEG cache file is not in the expected format."))
+  cache
+}
+
+deg_cluster_column <- function(obj) {
+  if ("final_celltype" %in% colnames(obj@meta.data)) {
+    return("final_celltype")
+  }
+  NULL
+}
+
+derive_diffuse_intestinal_group <- function(final_group) {
+  values <- as.character(final_group)
+  out <- rep(NA_character_, length(values))
+  out[grepl("^Diffuse_", values)] <- "Diffuse"
+  out[grepl("^Intestinal_", values)] <- "Intestinal"
+  out
+}
+
+build_diffuse_intestinal_deg_cache <- function(
+  avg_cache,
+  group_col = "final_group",
+  cluster_col = "final_celltype",
+  min_samples_per_group = 3
+) {
+  validate(need(is.list(avg_cache) && !is.null(avg_cache$avg_mat) && !is.null(avg_cache$meta), "Average-expression cache is not in the expected format."))
+
+  avg_mat <- as.matrix(avg_cache$avg_mat)
+  meta <- as.data.frame(avg_cache$meta, stringsAsFactors = FALSE)
+
+  validate(need(group_col %in% colnames(meta), paste0("Metadata column '", group_col, "' is required in the average-expression cache.")))
+  validate(need(ncol(avg_mat) == nrow(meta), "Average-expression cache dimensions are inconsistent."))
+
+  if (!is.null(cluster_col) && cluster_col %in% colnames(meta)) {
+    cluster_values <- as.character(meta[[cluster_col]])
+  } else {
+    cluster_col <- NULL
+    cluster_values <- rep("All cells", nrow(meta))
+  }
+
+  compare_group <- derive_diffuse_intestinal_group(meta[[group_col]])
+  keep <- !is.na(compare_group) & !is.na(cluster_values) & nzchar(cluster_values)
+  validate(need(any(keep), "No Diffuse/Intestinal pseudobulk columns were found for this object."))
+
+  avg_mat <- avg_mat[, keep, drop = FALSE]
+  meta <- meta[keep, , drop = FALSE]
+  cluster_values <- cluster_values[keep]
+  compare_group <- compare_group[keep]
+
+  cluster_levels <- sort(unique(cluster_values))
+  results <- lapply(cluster_levels, function(cluster_name) {
+    idx <- which(cluster_values %in% cluster_name & compare_group %in% c("Diffuse", "Intestinal"))
+    if (length(idx) == 0) {
+      return(NULL)
+    }
+
+    cluster_groups <- compare_group[idx]
+    n_diffuse <- sum(cluster_groups %in% "Diffuse")
+    n_intestinal <- sum(cluster_groups %in% "Intestinal")
+    if (n_diffuse < min_samples_per_group || n_intestinal < min_samples_per_group) {
+      return(NULL)
+    }
+
+    expr <- avg_mat[, idx, drop = FALSE]
+    diffuse_idx <- which(cluster_groups %in% "Diffuse")
+    intestinal_idx <- which(cluster_groups %in% "Intestinal")
+
+    avg_log2fc <- rowMeans(expr[, diffuse_idx, drop = FALSE]) - rowMeans(expr[, intestinal_idx, drop = FALSE])
+    pct_1 <- rowMeans(expr[, diffuse_idx, drop = FALSE] > 0)
+    pct_2 <- rowMeans(expr[, intestinal_idx, drop = FALSE] > 0)
+
+    p_val <- vapply(seq_len(nrow(expr)), function(i) {
+      stats::wilcox.test(
+        x = expr[i, diffuse_idx],
+        y = expr[i, intestinal_idx],
+        exact = FALSE
+      )$p.value
+    }, numeric(1))
+
+    data.frame(
+      gene = rownames(expr),
+      avg_log2FC = as.numeric(avg_log2fc),
+      pct.1 = as.numeric(pct_1),
+      pct.2 = as.numeric(pct_2),
+      p_val = as.numeric(p_val),
+      p_val_adj = stats::p.adjust(p_val, method = "BH"),
+      cluster = cluster_name,
+      n_diffuse = n_diffuse,
+      n_intestinal = n_intestinal,
+      comparison = "Diffuse vs Intestinal",
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  })
+
+  deg_table <- dplyr::bind_rows(results)
+  validate(need(nrow(deg_table) > 0, "No valid Diffuse-vs-Intestinal DEG results were computed for this object."))
+
+  list(
+    deg_table = deg_table,
+    group_col = group_col,
+    cluster_col = cluster_col %||% "All cells",
+    compare_groups = c("Diffuse", "Intestinal"),
+    source_path = avg_cache$source_path %||% NULL,
+    sample_col = avg_cache$sample_col %||% NULL,
+    analysis_level = "sample_pseudobulk_wilcox",
+    built_at = as.character(Sys.time())
+  )
+}
+
+plot_diffuse_intestinal_volcano <- function(
+  df,
+  max_p_adj = 0.05,
+  min_abs_log2fc = 0.25,
+  top_n_labels = 15
+) {
+  validate(need(nrow(df) > 0, "No DEG rows are available for the selected cell type."))
+  validate(need("avg_log2FC" %in% colnames(df), "The DEG table is missing avg_log2FC."))
+  validate(need("p_val_adj" %in% colnames(df), "The DEG table is missing p_val_adj."))
+
+  pvals <- as.numeric(df$p_val_adj)
+  smallest_nonzero <- suppressWarnings(min(pvals[pvals > 0], na.rm = TRUE))
+  if (!is.finite(smallest_nonzero)) {
+    smallest_nonzero <- 1e-300
+  }
+
+  plot_df <- df |>
+    dplyr::mutate(
+      p_val_adj_plot = dplyr::if_else(is.na(p_val_adj) | p_val_adj <= 0, smallest_nonzero, p_val_adj),
+      neg_log10_p = -log10(p_val_adj_plot),
+      significance = dplyr::case_when(
+        !is.na(p_val_adj) & p_val_adj <= max_p_adj & avg_log2FC >= min_abs_log2fc ~ "Diffuse higher",
+        !is.na(p_val_adj) & p_val_adj <= max_p_adj & avg_log2FC <= -min_abs_log2fc ~ "Intestinal higher",
+        TRUE ~ "NS"
+      )
+    )
+
+  label_df <- plot_df |>
+    dplyr::filter(significance != "NS") |>
+    dplyr::arrange(p_val_adj, dplyr::desc(abs(avg_log2FC))) |>
+    dplyr::slice_head(n = top_n_labels)
+
+  colors <- c(
+    "Diffuse higher" = "#D1495B",
+    "Intestinal higher" = "#2C7BE5",
+    "NS" = "#B8C0CC"
+  )
+
+  p <- ggplot(plot_df, aes(x = avg_log2FC, y = neg_log10_p)) +
+    geom_vline(xintercept = c(-min_abs_log2fc, min_abs_log2fc), linetype = "dashed", color = "grey70") +
+    geom_hline(yintercept = -log10(max_p_adj), linetype = "dashed", color = "grey70") +
+    geom_point(aes(color = significance), alpha = 0.8, size = 1.4) +
+    scale_color_manual(values = colors, drop = FALSE) +
+    labs(
+      x = "Diffuse vs Intestinal (log2FC)",
+      y = expression(-log[10]("adjusted p-value")),
+      color = NULL
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      axis.title = element_text(face = "bold"),
+      legend.position = "top"
+    )
+
+  if (nrow(label_df) > 0 && requireNamespace("ggrepel", quietly = TRUE)) {
+    p <- p + ggrepel::geom_text_repel(
+      data = label_df,
+      aes(label = gene),
+      size = 3,
+      max.overlaps = Inf,
+      box.padding = 0.35,
+      show.legend = FALSE
+    )
+  }
+
+  p
 }
 
 default_quadrant_sample_col <- function(obj) {

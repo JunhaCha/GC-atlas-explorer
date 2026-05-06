@@ -38,33 +38,19 @@ deg_ui <- function(id) {
         checkboxInput(ns("sort_desc"), "Sort descending", TRUE),
         br(),
         downloadButton(ns("download_deg"), "Download filtered DEG CSV"),
-        tags$hr(),
-        h5("Quadrant Scatter"),
-        numericInput(ns("sample_expr_threshold"), "Sample expression threshold", value = 0.1, min = 0, step = 0.01),
-        numericInput(ns("label_min_pct_samples"), "Min % samples for labels", value = 10, min = 0, max = 100, step = 5),
-        numericInput(ns("label_qvalue"), "Mahalanobis q-value (BH)", value = 0.05, min = 0, max = 1, step = 0.005),
-        textInput(ns("force_label_genes"), "Force-label genes", placeholder = "Comma-separated genes")
+        uiOutput(ns("mode_controls"))
       ),
       column(
         width = 9,
         card(
-          card_header("Wilcoxon DEG results"),
+          card_header(uiOutput(ns("deg_table_title"))),
           textOutput(ns("deg_status")),
           br(),
           dataTableOutput(ns("deg_table"))
         ),
         br(),
-        card(
-          card_header("Normal epi vs malignant DEG (Intestinal and Diffuse)"),
-          textOutput(ns("quadrant_status")),
-          br(),
-          plotOutput(ns("quadrant_plot"), height = 520)
-        ),
-        br(),
-        card(
-          card_header("Quadrant Results"),
-          dataTableOutput(ns("quadrant_table"))
-        )
+        uiOutput(ns("secondary_card")),
+        uiOutput(ns("tertiary_card"))
       )
     )
   )
@@ -173,19 +159,29 @@ format_deg_table_for_display <- function(df) {
 
 deg_server <- function(id, loaded) {
   moduleServer(id, function(input, output, session) {
+    deg_mode <- reactive({
+      deg_display_mode(loaded()$source_path)
+    })
+
     deg_workbook_path <- reactive({
       req(loaded()$source_path)
       mapped_excel_path(loaded()$source_path)
     })
 
     deg_table_raw <- reactive({
-      path <- deg_workbook_path()
-      validate(need(!is.null(path) && file.exists(path), "No precomputed DEG workbook is mapped for this Seurat object yet."))
-      validate(need(requireNamespace("readxl", quietly = TRUE), "Install the 'readxl' package to browse precomputed DEG workbooks."))
-      read_precomputed_deg_table(path, "__all__")
+      if (identical(deg_mode(), "quadrant")) {
+        path <- deg_workbook_path()
+        validate(need(!is.null(path) && file.exists(path), "No precomputed DEG workbook is mapped for this Seurat object yet."))
+        validate(need(requireNamespace("readxl", quietly = TRUE), "Install the 'readxl' package to browse precomputed DEG workbooks."))
+        return(read_precomputed_deg_table(path, "__all__"))
+      }
+
+      cache <- read_diffuse_intestinal_deg_cache(loaded()$source_path)
+      cache$deg_table
     })
 
     quadrant_cache <- reactive({
+      validate(need(identical(deg_mode(), "quadrant"), "Quadrant scatter is only available for the Entire Atlas and Malignant objects."))
       req(loaded()$source_path)
       if (!quadrant_cache_exists(loaded()$source_path)) {
         return(NULL)
@@ -194,6 +190,7 @@ deg_server <- function(id, loaded) {
     })
 
     quadrant_base_results <- reactive({
+      validate(need(identical(deg_mode(), "quadrant"), "Quadrant scatter is only available for the Entire Atlas and Malignant objects."))
       req(loaded()$obj)
       cache <- quadrant_cache()
       validate(need(!is.null(cache), "Quadrant scatter cache is not available for this object yet."))
@@ -207,6 +204,7 @@ deg_server <- function(id, loaded) {
     })
 
     quadrant_results <- reactive({
+      validate(need(identical(deg_mode(), "quadrant"), "Quadrant scatter is only available for the Entire Atlas and Malignant objects."))
       req(quadrant_base_results())
 
       apply_quadrant_label_settings(
@@ -215,6 +213,34 @@ deg_server <- function(id, loaded) {
         label_qvalue = input$label_qvalue,
         force_label_genes = input$force_label_genes
       )
+    })
+
+    output$mode_controls <- renderUI({
+      ns <- session$ns
+      if (identical(deg_mode(), "quadrant")) {
+        tagList(
+          tags$hr(),
+          h5("Quadrant Scatter"),
+          numericInput(ns("sample_expr_threshold"), "Sample expression threshold", value = 0.1, min = 0, step = 0.01),
+          numericInput(ns("label_min_pct_samples"), "Min % samples for labels", value = 10, min = 0, max = 100, step = 5),
+          numericInput(ns("label_qvalue"), "Mahalanobis q-value (BH)", value = 0.05, min = 0, max = 1, step = 0.005),
+          textInput(ns("force_label_genes"), "Force-label genes", placeholder = "Comma-separated genes")
+        )
+      } else {
+        tagList(
+          tags$hr(),
+          h5("Diffuse vs Intestinal Volcano"),
+          selectInput(ns("volcano_cluster"), "Volcano cell type", choices = character(0)),
+          tags$div(
+            class = "small-note",
+            "Uses precomputed sample-level Wilcoxon DEG results comparing Diffuse_* vs Intestinal_* pseudobulk averages within the selected cell type."
+          )
+        )
+      }
+    })
+
+    output$deg_table_title <- renderUI({
+      tags$span("Wilcoxon DEG results")
     })
 
     observeEvent(deg_table_raw(), {
@@ -230,6 +256,14 @@ deg_server <- function(id, loaded) {
 
       updateSelectizeInput(session, "cluster_filter", choices = cluster_choices, selected = character(0), server = FALSE)
       updateSelectizeInput(session, "gene_filter", choices = gene_choices, selected = character(0), server = FALSE)
+      if (identical(deg_mode(), "diffuse_intestinal")) {
+        updateSelectInput(
+          session,
+          "volcano_cluster",
+          choices = cluster_choices,
+          selected = cluster_choices[[1]] %||% character(0)
+        )
+      }
     }, ignoreInit = FALSE)
 
     filtered_deg <- reactive({
@@ -249,10 +283,15 @@ deg_server <- function(id, loaded) {
     })
 
     output$deg_status <- renderText({
-      path <- deg_workbook_path()
-      validate(need(!is.null(path) && file.exists(path), "No precomputed DEG workbook is mapped for this Seurat object yet."))
+      if (identical(deg_mode(), "quadrant")) {
+        path <- deg_workbook_path()
+        validate(need(!is.null(path) && file.exists(path), "No precomputed DEG workbook is mapped for this Seurat object yet."))
+        return(paste0("Using precomputed workbook: ", basename(path)))
+      }
 
-      paste0("Using precomputed workbook: ", basename(path))
+      cache_path <- matching_diffuse_intestinal_deg_cache_path(loaded()$source_path)
+      validate(need(!is.null(cache_path) && file.exists(cache_path), "No Diffuse-vs-Intestinal DEG cache is mapped for this object yet."))
+      paste0("Using precomputed Diffuse-vs-Intestinal cache: ", basename(cache_path))
     })
 
     output$deg_table <- renderDataTable({
@@ -261,7 +300,49 @@ deg_server <- function(id, loaded) {
       format_deg_table_for_display(df)
     }, options = list(pageLength = 25, scrollX = TRUE))
 
+    output$secondary_card <- renderUI({
+      ns <- session$ns
+      card(
+        card_header(
+          if (identical(deg_mode(), "quadrant")) {
+            "Normal epi vs malignant DEG (Intestinal and Diffuse)"
+          } else {
+            "Diffuse vs Intestinal volcano plot"
+          }
+        ),
+        if (identical(deg_mode(), "quadrant")) {
+          tagList(
+            textOutput(ns("quadrant_status")),
+            br(),
+            plotOutput(ns("quadrant_plot"), height = 520)
+          )
+        } else {
+          tagList(
+            textOutput(ns("volcano_status")),
+            br(),
+            plotOutput(ns("volcano_plot"), height = 520)
+          )
+        }
+      )
+    })
+
+    output$tertiary_card <- renderUI({
+      ns <- session$ns
+      if (!identical(deg_mode(), "quadrant")) {
+        return(NULL)
+      }
+
+      tagList(
+        br(),
+        card(
+          card_header("Quadrant Results"),
+          dataTableOutput(ns("quadrant_table"))
+        )
+      )
+    })
+
     output$quadrant_status <- renderText({
+      validate(need(identical(deg_mode(), "quadrant"), ""))
       cache <- quadrant_cache()
       validate(need(!is.null(cache), "Quadrant scatter cache is not available for this object yet. Build it from the full Atlas object first."))
       sample_col <- default_quadrant_sample_col(loaded()$obj)
@@ -285,15 +366,47 @@ deg_server <- function(id, loaded) {
     })
 
     output$quadrant_plot <- renderPlot({
+      validate(need(identical(deg_mode(), "quadrant"), ""))
       req(quadrant_results())
       plot_quadrant_deg(quadrant_results())
     })
 
     output$quadrant_table <- renderDataTable({
+      validate(need(identical(deg_mode(), "quadrant"), ""))
       req(quadrant_results())
       quadrant_results()$plot_df |>
         dplyr::arrange(dplyr::desc(distance))
     }, options = list(pageLength = 20, scrollX = TRUE))
+
+    volcano_cluster_table <- reactive({
+      validate(need(identical(deg_mode(), "diffuse_intestinal"), ""))
+      df <- deg_table_raw()
+      validate(need("cluster" %in% colnames(df), "The precomputed DEG cache is missing the cluster column."))
+      req(input$volcano_cluster, nzchar(input$volcano_cluster))
+      out <- df[as.character(df$cluster) %in% input$volcano_cluster, , drop = FALSE]
+      validate(need(nrow(out) > 0, "No DEG rows are available for the selected cell type."))
+      out
+    })
+
+    output$volcano_status <- renderText({
+      validate(need(identical(deg_mode(), "diffuse_intestinal"), ""))
+      df <- volcano_cluster_table()
+      paste0(
+        "Precomputed sample-level Wilcoxon comparison for ",
+        unique(as.character(df$cluster))[[1]],
+        ". Positive log2FC means higher in Diffuse."
+      )
+    })
+
+    output$volcano_plot <- renderPlot({
+      validate(need(identical(deg_mode(), "diffuse_intestinal"), ""))
+      df <- volcano_cluster_table()
+      plot_diffuse_intestinal_volcano(
+        df = df,
+        max_p_adj = input$max_p_adj,
+        min_abs_log2fc = input$min_abs_log2fc
+      )
+    })
 
     output$download_deg <- downloadHandler(
       filename = function() {
