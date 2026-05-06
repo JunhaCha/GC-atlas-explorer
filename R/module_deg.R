@@ -71,19 +71,28 @@ read_deg_sheet <- function(path, sheet) {
     dplyr::mutate(sheet = sheet, .before = 1)
 }
 
+read_precomputed_deg_workbook_all <- function(path) {
+  cache_key <- paste0("deg_workbook::", normalizePath(path, winslash = "/", mustWork = FALSE))
+  if (exists(cache_key, envir = .gc_rds_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .gc_rds_cache, inherits = FALSE))
+  }
+
+  sheets <- setdiff(unname(deg_sheet_choices(path)), "__all__")
+  out <- dplyr::bind_rows(lapply(sheets, function(sheet) read_deg_sheet(path, sheet)))
+  assign(cache_key, out, envir = .gc_rds_cache)
+  out
+}
+
 read_precomputed_deg_table <- function(path, sheet_choice) {
   validate(need(!is.null(path) && file.exists(path), "No precomputed DEG workbook is mapped for this Seurat object yet."))
   validate(need(requireNamespace("readxl", quietly = TRUE), "Install the 'readxl' package to browse precomputed DEG workbooks."))
 
-  sheet_map <- deg_sheet_choices(path)
-  sheet_values <- unname(sheet_map)
-
   if (identical(sheet_choice, "__all__")) {
-    sheets <- setdiff(sheet_values, "__all__")
-    out <- lapply(sheets, function(sheet) read_deg_sheet(path, sheet))
-    return(dplyr::bind_rows(out))
+    return(read_precomputed_deg_workbook_all(path))
   }
 
+  sheet_map <- deg_sheet_choices(path)
+  sheet_values <- unname(sheet_map)
   validate(need(sheet_choice %in% sheet_values, "Choose a valid workbook sheet."))
   read_deg_sheet(path, sheet_choice)
 }
@@ -207,7 +216,7 @@ deg_server <- function(id, loaded) {
         return(loaded()$obj)
       }
       validate(need(file.exists(ref_path), "Quadrant reference object was not found."))
-      readRDS(ref_path)
+      safe_seurat_read(ref_path)
     })
 
     quadrant_base_results <- reactive({

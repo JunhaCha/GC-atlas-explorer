@@ -18,6 +18,16 @@ suppressPackageStartupMessages({
 })
 
 atlas_object_choices <- atlas_object_choices_default()
+preload_mode <- tolower(Sys.getenv("GC_APP_PRELOAD_ATLAS", unset = "entire"))
+if (identical(preload_mode, "all")) {
+  invisible(lapply(unname(atlas_object_choices), function(path) {
+    try(preload_seurat_object(path), silent = TRUE)
+  }))
+} else if (identical(preload_mode, "none")) {
+  invisible(NULL)
+} else {
+  try(preload_seurat_object(atlas_object_choices[["Entire Atlas"]]), silent = TRUE)
+}
 
 atlas_workspace_ui <- function(prefix, title, default_path = "", note = NULL, object_choices = NULL) {
   layout_sidebar(

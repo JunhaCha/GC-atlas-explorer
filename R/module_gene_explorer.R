@@ -112,16 +112,16 @@ gene_explorer_server <- function(id, loaded) {
       feature_zoom$x <- NULL
       feature_zoom$y <- NULL
       violin_choices <- filtered_violin_choices(loaded()$obj)
+      feature_choices <- available_features(loaded()$obj, loaded()$source_path)
 
       updateSelectizeInput(
         session,
         "genes",
-        choices = available_features(loaded()$obj),
+        choices = feature_choices,
         selected = {
-          features <- available_features(loaded()$obj)
-          if ("A1BG" %in% features) "A1BG" else head(features, 1)
+          if ("A1BG" %in% feature_choices) "A1BG" else head(feature_choices, 1)
         },
-        server = FALSE
+        server = TRUE
       )
       updateSelectInput(
         session,
@@ -156,7 +156,7 @@ gene_explorer_server <- function(id, loaded) {
           "violin_celltypes",
           choices = sort(unique(as.character(loaded()$obj$final_celltype))),
           selected = character(0),
-          server = FALSE
+          server = TRUE
         )
       } else {
         updateSelectizeInput(
@@ -164,7 +164,7 @@ gene_explorer_server <- function(id, loaded) {
           "violin_celltypes",
           choices = character(0),
           selected = character(0),
-          server = FALSE
+          server = TRUE
         )
       }
     })

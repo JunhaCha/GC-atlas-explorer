@@ -397,6 +397,7 @@ color_rds_paths <- c(
 }
 
 safe_seurat_read <- function(path) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
   if (!file.exists(path)) {
     stop("Selected file does not exist.")
   }
@@ -420,11 +421,39 @@ safe_seurat_read <- function(path) {
       )
     )
   }
+  cache_key <- path
+  if (exists(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE))
+  }
+
   obj <- readRDS(path)
   if (!inherits(obj, "Seurat")) {
     stop("The selected RDS file is not a Seurat object.")
   }
+  assign(cache_key, obj, envir = .gc_seurat_object_cache)
   obj
+}
+
+.gc_seurat_object_cache <- new.env(parent = emptyenv())
+.gc_rds_cache <- new.env(parent = emptyenv())
+.gc_feature_cache <- new.env(parent = emptyenv())
+
+seurat_cache_keys <- function() {
+  ls(envir = .gc_seurat_object_cache, all.names = TRUE)
+}
+
+preload_seurat_object <- function(path) {
+  invisible(safe_seurat_read(path))
+}
+
+cached_read_rds <- function(path) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (exists(path, envir = .gc_rds_cache, inherits = FALSE)) {
+    return(get(path, envir = .gc_rds_cache, inherits = FALSE))
+  }
+  value <- readRDS(path)
+  assign(path, value, envir = .gc_rds_cache)
+  value
 }
 
 prefer_app_slim_path <- function(path) {
@@ -522,8 +551,14 @@ available_assays <- function(obj) {
   names(obj@assays)
 }
 
-available_features <- function(obj) {
-  sort(unique(rownames(obj)))
+available_features <- function(obj, source_path = NULL) {
+  cache_key <- source_path %||% paste0("mem:", nrow(obj), ":", ncol(obj))
+  if (exists(cache_key, envir = .gc_feature_cache, inherits = FALSE)) {
+    return(get(cache_key, envir = .gc_feature_cache, inherits = FALSE))
+  }
+  features <- sort(unique(rownames(obj)))
+  assign(cache_key, features, envir = .gc_feature_cache)
+  features
 }
 
 object_summary <- function(obj, path = NULL) {
@@ -1591,7 +1626,7 @@ average_heatmap_cache_exists <- function(source_path) {
 read_average_heatmap_cache <- function(source_path) {
   cache_path <- matching_avg_cache_path(source_path)
   validate(need(!is.null(cache_path) && file.exists(cache_path), "Average-expression cache was not found for this object. Build the cache first."))
-  cache <- readRDS(cache_path)
+  cache <- cached_read_rds(cache_path)
   validate(need(is.list(cache) && !is.null(cache$avg_mat) && !is.null(cache$meta), "Average-expression cache file is not in the expected format."))
   cache
 }
@@ -2208,7 +2243,7 @@ quadrant_cache_exists <- function(source_path) {
 read_quadrant_cache <- function(source_path) {
   cache_path <- matching_quadrant_cache_path(source_path)
   validate(need(!is.null(cache_path) && file.exists(cache_path), "Quadrant scatter cache was not found for this object. Build the cache first."))
-  cache <- readRDS(cache_path)
+  cache <- cached_read_rds(cache_path)
   validate(need(is.list(cache) && !is.null(cache$fc_tbl), "Quadrant cache file is not in the expected format."))
   cache
 }
@@ -2228,7 +2263,7 @@ diffuse_intestinal_deg_cache_exists <- function(source_path) {
 read_diffuse_intestinal_deg_cache <- function(source_path) {
   cache_path <- matching_diffuse_intestinal_deg_cache_path(source_path)
   validate(need(!is.null(cache_path) && file.exists(cache_path), "Diffuse-vs-Intestinal DEG cache was not found for this object. Build the cache first."))
-  cache <- readRDS(cache_path)
+  cache <- cached_read_rds(cache_path)
   validate(need(is.list(cache) && !is.null(cache$deg_table), "Diffuse-vs-Intestinal DEG cache file is not in the expected format."))
   cache
 }

@@ -79,13 +79,13 @@ heatmap_server <- function(id, loaded) {
     observeEvent(loaded()$obj, {
       req(loaded()$obj)
 
-      available_gene_choices <- if (!is.null(cache_data())) sort(rownames(cache_data()$avg_mat)) else available_features(loaded()$obj)
+      available_gene_choices <- if (!is.null(cache_data())) sort(rownames(cache_data()$avg_mat)) else available_features(loaded()$obj, loaded()$source_path)
       updateSelectizeInput(
         session,
         "genes",
         choices = available_gene_choices,
         selected = default_heatmap_genes(available_gene_choices),
-        server = FALSE
+        server = TRUE
       )
       if (!is.null(cache_data())) {
         updateSelectInput(
