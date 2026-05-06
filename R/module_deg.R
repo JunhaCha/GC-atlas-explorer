@@ -189,14 +189,35 @@ deg_server <- function(id, loaded) {
       read_quadrant_cache(loaded()$source_path)
     })
 
+    quadrant_reference_path <- reactive({
+      req(loaded()$source_path)
+      normalized_path <- normalized_source_path_for_mapping(loaded()$source_path)
+      malignant_path <- app_data_path("seurat_cancercells_final.rds")
+      if (!is.null(normalized_path) && identical(normalized_path, malignant_path)) {
+        return(prefer_app_slim_path(app_data_path("seurat_merged_TME_malignant_final_umap.rds")))
+      }
+      loaded()$source_path
+    })
+
+    quadrant_reference_obj <- reactive({
+      validate(need(identical(deg_mode(), "quadrant"), "Quadrant scatter is only available for the Entire Atlas and Malignant objects."))
+      ref_path <- quadrant_reference_path()
+      req(ref_path)
+      if (identical(ref_path, loaded()$source_path)) {
+        return(loaded()$obj)
+      }
+      validate(need(file.exists(ref_path), "Quadrant reference object was not found."))
+      readRDS(ref_path)
+    })
+
     quadrant_base_results <- reactive({
       validate(need(identical(deg_mode(), "quadrant"), "Quadrant scatter is only available for the Entire Atlas and Malignant objects."))
-      req(loaded()$obj)
+      req(quadrant_reference_obj())
       cache <- quadrant_cache()
       validate(need(!is.null(cache), "Quadrant scatter cache is not available for this object yet."))
 
       build_quadrant_deg_base_from_cache(
-        obj = loaded()$obj,
+        obj = quadrant_reference_obj(),
         cache = cache,
         sample_expr_slot = cache$slot_name %||% "data",
         sample_expr_threshold = input$sample_expr_threshold
@@ -345,10 +366,11 @@ deg_server <- function(id, loaded) {
       validate(need(identical(deg_mode(), "quadrant"), ""))
       cache <- quadrant_cache()
       validate(need(!is.null(cache), "Quadrant scatter cache is not available for this object yet. Build it from the full Atlas object first."))
-      sample_col <- default_quadrant_sample_col(loaded()$obj)
+      ref_obj <- quadrant_reference_obj()
+      sample_col <- default_quadrant_sample_col(ref_obj)
       validate(need(!is.null(sample_col), "Metadata column 'sampleID' is required for the quadrant scatter."))
       denom_tbl <- quadrant_sample_denominators(
-        obj = loaded()$obj,
+        obj = ref_obj,
         sample_col = sample_col,
         group_col = cache$group_col %||% "final_group"
       )
