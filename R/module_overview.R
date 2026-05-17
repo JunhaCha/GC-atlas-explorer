@@ -25,7 +25,7 @@ overview_server <- function(id, loaded) {
   moduleServer(id, function(input, output, session) {
     output$summary_table <- renderTable({
       req(loaded()$obj)
-      object_summary(loaded()$obj, loaded()$path)
+      object_summary(loaded()$obj, loaded()$path, loaded()$group_var)
     }, rownames = FALSE, colnames = FALSE)
 
     output$metadata_table <- renderDataTable({

@@ -57,7 +57,7 @@ args <- parse_args()
 input_path <- get_arg(args, "input", required = TRUE)
 output_path <- get_arg(args, "output", required = TRUE)
 assay_name <- get_arg(args, "assay", default = NULL)
-reduction_names <- split_csv(get_arg(args, "reductions", default = "HarmonyUMAP"))
+reduction_names <- split_csv(get_arg(args, "reductions", default = "HarmonyUMAP,umap,UMAP"))
 layer_names <- split_csv(get_arg(args, "layers", default = "data"))
 keep_misc <- isTRUE(as.logical(get_arg(args, "keep_misc", default = "FALSE")))
 

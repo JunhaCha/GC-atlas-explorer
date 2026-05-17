@@ -13,7 +13,7 @@ data_loader_ui <- function(
     if (use_selector) {
       selectInput(
         ns("object_choice"),
-        "Choose Seurat object",
+        "Choose cell lineage",
         choices = object_choices,
         selected = if (length(object_choices) > 0) object_choices[[1]] else character(0)
       )
@@ -66,23 +66,23 @@ data_loader_server <- function(id, object_choices = NULL) {
       }
 
       if (is.null(path_to_use)) {
-        values$status <- "Choose a Seurat object."
+        values$status <- "Choose a cell lineage."
         return(invisible(NULL))
       }
 
       tryCatch({
         obj <- safe_seurat_read(path_to_use)
 
-        updateSelectInput(session, "group_var", choices = colnames(obj[[]]), selected = default_group_var(obj))
-        updateSelectInput(session, "assay", choices = available_assays(obj), selected = DefaultAssay(obj))
+        updateSelectInput(session, "group_var", choices = colnames(atlas_meta(obj)), selected = default_group_var(obj))
+        updateSelectInput(session, "assay", choices = available_assays(obj), selected = atlas_default_assay(obj))
 
         values$obj <- obj
         values$source_path <- path_to_use
         values$status <- paste0(
           "Loaded object with ",
-          format(ncol(obj), big.mark = ","),
+          format(nrow(atlas_meta(obj)), big.mark = ","),
           " cells and ",
-          format(nrow(obj), big.mark = ","),
+          format(length(atlas_features(obj)), big.mark = ","),
           " features."
         )
       }, error = function(e) {
@@ -105,11 +105,11 @@ data_loader_server <- function(id, object_choices = NULL) {
     observeEvent(list(input$group_var, input$assay), {
       req(values$obj)
 
-      if (!is.null(input$assay) && nzchar(input$assay)) {
+      if (!is_atlas_runtime_bundle(values$obj) && !is.null(input$assay) && nzchar(input$assay)) {
         DefaultAssay(values$obj) <- input$assay
       }
 
-      if (!is.null(input$group_var) && nzchar(input$group_var)) {
+      if (!is_atlas_runtime_bundle(values$obj) && !is.null(input$group_var) && nzchar(input$group_var)) {
         Idents(values$obj) <- values$obj[[input$group_var, drop = TRUE]]
       }
     })

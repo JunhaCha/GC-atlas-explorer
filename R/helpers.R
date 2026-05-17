@@ -398,6 +398,18 @@ color_rds_paths <- c(
 
 safe_seurat_read <- function(path) {
   path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  bundle_path <- matching_atlas_bundle_path(path)
+  if (!identical(bundle_path, path) && file.exists(bundle_path)) {
+    cache_key <- bundle_path
+    if (exists(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE)) {
+      return(get(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE))
+    }
+    obj <- cached_read_rds(bundle_path)
+    validate(need(is_atlas_runtime_bundle(obj), "Atlas runtime bundle file is not in the expected format."))
+    assign(cache_key, obj, envir = .gc_seurat_object_cache)
+    return(obj)
+  }
+
   if (!file.exists(path)) {
     stop("Selected file does not exist.")
   }
@@ -436,7 +448,187 @@ safe_seurat_read <- function(path) {
 
 .gc_seurat_object_cache <- new.env(parent = emptyenv())
 .gc_rds_cache <- new.env(parent = emptyenv())
+.gc_parquet_cache <- new.env(parent = emptyenv())
 .gc_feature_cache <- new.env(parent = emptyenv())
+
+matching_atlas_bundle_path <- function(path) {
+  if (is.null(path) || !nzchar(path)) {
+    return(path)
+  }
+  sub("\\.rds$", "_atlas_bundle.rds", path, ignore.case = TRUE)
+}
+
+is_atlas_runtime_bundle <- function(obj) {
+  inherits(obj, "atlas_runtime_bundle")
+}
+
+atlas_bundle_manifest <- function(obj) {
+  unclass(obj)
+}
+
+cached_read_parquet <- function(path) {
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (exists(path, envir = .gc_parquet_cache, inherits = FALSE)) {
+    return(get(path, envir = .gc_parquet_cache, inherits = FALSE))
+  }
+  validate(need(requireNamespace("arrow", quietly = TRUE), "Install the 'arrow' package to read atlas parquet runtime files."))
+  value <- as.data.frame(arrow::read_parquet(path), stringsAsFactors = FALSE)
+  assign(path, value, envir = .gc_parquet_cache)
+  value
+}
+
+atlas_bundle_meta_df <- function(obj) {
+  manifest <- atlas_bundle_manifest(obj)
+  if (!is.null(manifest[["meta_override"]])) {
+    return(manifest[["meta_override"]])
+  }
+  if (!is.null(manifest[["meta"]])) {
+    return(as.data.frame(manifest[["meta"]], stringsAsFactors = FALSE))
+  }
+
+  meta_path <- manifest[["meta_path"]] %||% NULL
+  validate(need(!is.null(meta_path) && file.exists(meta_path), "Metadata parquet for the atlas runtime bundle was not found."))
+  meta <- cached_read_parquet(meta_path)
+  validate(need("cell_id" %in% colnames(meta), "Atlas metadata parquet must contain a cell_id column."))
+  rownames(meta) <- as.character(meta$cell_id)
+  meta$cell_id <- NULL
+  meta
+}
+
+atlas_bundle_umap_df <- function(obj) {
+  manifest <- atlas_bundle_manifest(obj)
+  if (!is.null(manifest[["umap_override"]])) {
+    return(manifest[["umap_override"]])
+  }
+  if (!is.null(manifest[["umap"]])) {
+    coords <- as.data.frame(manifest[["umap"]], stringsAsFactors = FALSE)
+    validate(need(ncol(coords) >= 2, "The atlas runtime bundle does not contain two-dimensional UMAP coordinates."))
+    colnames(coords)[1:2] <- c("UMAP_1", "UMAP_2")
+    return(coords[, 1:2, drop = FALSE])
+  }
+
+  umap_path <- manifest[["umap_path"]] %||% NULL
+  validate(need(!is.null(umap_path) && file.exists(umap_path), "UMAP parquet for the atlas runtime bundle was not found."))
+  coords <- cached_read_parquet(umap_path)
+  validate(need(all(c("cell_id", "UMAP_1", "UMAP_2") %in% colnames(coords)), "Atlas UMAP parquet must contain cell_id, UMAP_1, and UMAP_2 columns."))
+  rownames(coords) <- as.character(coords$cell_id)
+  coords <- coords[, c("UMAP_1", "UMAP_2"), drop = FALSE]
+  coords
+}
+
+atlas_meta <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_bundle_meta_df(obj))
+  }
+  obj[[]]
+}
+
+atlas_default_assay <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_bundle_manifest(obj)[["assay"]] %||% "RNA")
+  }
+  DefaultAssay(obj)
+}
+
+atlas_reduction_name <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_bundle_manifest(obj)[["reduction_name"]] %||% "UMAP")
+  }
+  preferred_umap_reduction(obj)
+}
+
+atlas_features <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_bundle_manifest(obj)$features %||% character(0))
+  }
+  rownames(obj)
+}
+
+atlas_cells <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(rownames(atlas_meta(obj)))
+  }
+  colnames(obj)
+}
+
+atlas_coords <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_bundle_umap_df(obj))
+  }
+  reduction_to_use <- preferred_umap_reduction(obj)
+  validate(need(!is.null(reduction_to_use), "No compatible UMAP reduction was found in the selected Seurat object. Expected HarmonyUMAP or umap."))
+  coords <- Embeddings(obj, reduction = reduction_to_use)
+  validate(need(ncol(coords) >= 2, "The selected reduction does not have two dimensions."))
+  coords <- as.data.frame(coords[, 1:2, drop = FALSE])
+  colnames(coords) <- c("UMAP_1", "UMAP_2")
+  coords
+}
+
+atlas_expr_matrix <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    expr_path <- atlas_bundle_manifest(obj)$expr_path %||% NULL
+    validate(need(!is.null(expr_path) && file.exists(expr_path), "Expression matrix file for the atlas runtime bundle was not found."))
+    return(cached_read_rds(expr_path))
+  }
+  get_expr_slot_safe(obj, atlas_default_assay(obj), "data")
+}
+
+atlas_fetch_expression <- function(obj, features, cells = NULL) {
+  expr <- atlas_expr_matrix(obj)
+  feature_ids <- intersect(unique(as.character(features)), rownames(expr))
+  validate(need(length(feature_ids) > 0, "None of the selected genes were found in the loaded atlas object."))
+  cell_ids <- cells %||% colnames(expr)
+  cell_ids <- intersect(as.character(cell_ids), colnames(expr))
+  validate(need(length(cell_ids) > 0, "No cells remain after filtering."))
+  expr[feature_ids, cell_ids, drop = FALSE]
+}
+
+atlas_subset_cells <- function(obj, cells) {
+  cells <- intersect(as.character(cells), atlas_cells(obj))
+  if (is_atlas_runtime_bundle(obj)) {
+    manifest <- atlas_bundle_manifest(obj)
+    manifest$meta_override <- atlas_meta(obj)[cells, , drop = FALSE]
+    manifest$umap_override <- atlas_coords(obj)[cells, , drop = FALSE]
+    manifest$n_cells <- nrow(manifest$meta_override)
+    return(structure(manifest, class = "atlas_runtime_bundle"))
+  }
+  subset(obj, cells = cells)
+}
+
+atlas_set_meta_column <- function(obj, name, values) {
+  if (is_atlas_runtime_bundle(obj)) {
+    manifest <- atlas_bundle_manifest(obj)
+    meta <- atlas_meta(obj)
+    meta[[name]] <- values
+    manifest$meta_override <- meta
+    manifest$n_cells <- nrow(meta)
+    return(structure(manifest, class = "atlas_runtime_bundle"))
+  }
+  obj[[name]] <- values
+  obj
+}
+
+`[[.atlas_runtime_bundle` <- function(x, i, ..., drop = FALSE) {
+  md <- atlas_meta(x)
+  if (missing(i)) {
+    return(md)
+  }
+  if (is.character(i) && length(i) == 1 && i %in% colnames(md)) {
+    if (isTRUE(drop)) {
+      return(md[[i]])
+    }
+    return(md[, i, drop = FALSE])
+  }
+  md[, i, drop = drop]
+}
+
+`$.atlas_runtime_bundle` <- function(x, name) {
+  md <- atlas_meta(x)
+  if (!is.null(md) && name %in% colnames(md)) {
+    return(md[[name]])
+  }
+  atlas_bundle_manifest(x)[[name]]
+}
 
 seurat_cache_keys <- function() {
   ls(envir = .gc_seurat_object_cache, all.names = TRUE)
@@ -508,7 +700,7 @@ matching_quadrant_default_pdf_path <- function(path) {
 
 default_group_var <- function(obj) {
   preferred <- c("final_celltype", "celltype", "cell_type", "seurat_clusters", "ident", "orig.ident")
-  available <- colnames(obj[[]])
+  available <- colnames(atlas_meta(obj))
   hit <- preferred[preferred %in% available]
   if (length(hit) > 0) {
     return(hit[[1]])
@@ -517,10 +709,16 @@ default_group_var <- function(obj) {
 }
 
 available_reductions <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_reduction_name(obj))
+  }
   names(obj@reductions)
 }
 
 preferred_umap_reduction <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_reduction_name(obj))
+  }
   reductions <- available_reductions(obj)
   if ("HarmonyUMAP" %in% reductions) {
     return("HarmonyUMAP")
@@ -548,20 +746,30 @@ load_named_palette <- function(kind) {
 }
 
 available_assays <- function(obj) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_default_assay(obj))
+  }
   names(obj@assays)
 }
 
 available_features <- function(obj, source_path = NULL) {
-  cache_key <- source_path %||% paste0("mem:", nrow(obj), ":", ncol(obj))
+  cache_key <- source_path %||% paste0("mem:", length(atlas_features(obj)), ":", nrow(atlas_meta(obj)))
   if (exists(cache_key, envir = .gc_feature_cache, inherits = FALSE)) {
     return(get(cache_key, envir = .gc_feature_cache, inherits = FALSE))
   }
-  features <- sort(unique(rownames(obj)))
+  features <- sort(unique(atlas_features(obj)))
   assign(cache_key, features, envir = .gc_feature_cache)
   features
 }
 
-object_summary <- function(obj, path = NULL) {
+object_summary <- function(obj, path = NULL, group_var = NULL) {
+  meta <- atlas_meta(obj)
+  active_group <- group_var %||% default_group_var(obj)
+  active_levels <- if (!is.null(active_group) && active_group %in% colnames(meta)) {
+    paste(unique(as.character(meta[[active_group]])), collapse = ", ")
+  } else {
+    ""
+  }
   tibble::tibble(
     metric = c(
       "Source file",
@@ -574,12 +782,12 @@ object_summary <- function(obj, path = NULL) {
     ),
     value = c(
       path %||% "Uploaded in session",
-      format(ncol(obj), big.mark = ","),
-      format(nrow(obj), big.mark = ","),
+      format(nrow(meta), big.mark = ","),
+      format(length(atlas_features(obj)), big.mark = ","),
       paste(available_assays(obj), collapse = ", "),
       paste(available_reductions(obj), collapse = ", "),
-      paste(colnames(obj[[]]), collapse = ", "),
-      paste(levels(Idents(obj)), collapse = ", ")
+      paste(colnames(meta), collapse = ", "),
+      active_levels
     )
   )
 }
@@ -615,7 +823,7 @@ plot_average_heatmap <- function(avg_df) {
 }
 
 metadata_preview <- function(obj, n = 10) {
-  head(obj[[]], n = n)
+  head(atlas_meta(obj), n = n)
 }
 
 umap_field_labels <- c(
@@ -643,7 +851,7 @@ heatmap_filter_labels <- c(
 )
 
 umap_color_group_info <- function(obj, color_mode) {
-  md <- obj@meta.data
+  md <- atlas_meta(obj)
 
   validate(need(color_mode %in% names(umap_field_labels), "Unsupported UMAP color mode."))
 
@@ -667,7 +875,9 @@ umap_color_group_info <- function(obj, color_mode) {
       values <- as.character(md$final_celltype)
       label <- unname(umap_field_labels[[color_mode]])
     } else {
-      values <- as.character(Idents(obj))
+      fallback_group <- default_group_var(obj)
+      validate(need(!is.null(fallback_group) && fallback_group %in% colnames(md), "No cell-type-like grouping was found in the loaded atlas object."))
+      values <- as.character(md[[fallback_group]])
       label <- "Cell Type (active.ident)"
     }
     palette <- load_named_palette("celltype")
@@ -703,15 +913,12 @@ palette_for_values <- function(values, named_palette) {
 
 build_umap_plot_data <- function(obj, color_mode) {
   reduction_to_use <- preferred_umap_reduction(obj)
-  validate(need(!is.null(reduction_to_use), "No compatible UMAP reduction was found in the selected Seurat object. Expected HarmonyUMAP or umap."))
-
-  coords <- Embeddings(obj, reduction = reduction_to_use)
-  validate(need(ncol(coords) >= 2, "HarmonyUMAP reduction does not have two dimensions."))
-
+  validate(need(!is.null(reduction_to_use), "No compatible UMAP reduction was found in the loaded atlas object."))
+  coords <- atlas_coords(obj)
   group_info <- umap_color_group_info(obj, color_mode)
   plot_df <- data.frame(
-    UMAP_1 = coords[, 1],
-    UMAP_2 = coords[, 2],
+    UMAP_1 = coords$UMAP_1,
+    UMAP_2 = coords$UMAP_2,
     group = group_info$values,
     stringsAsFactors = FALSE
   )
@@ -1073,22 +1280,19 @@ plot_xenium_marker_overlay <- function(bundle, gene, point_size = 0.45, alpha = 
 }
 
 plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, ylim = NULL) {
-  reduction_to_use <- preferred_umap_reduction(obj)
-  validate(need(!is.null(reduction_to_use), "No compatible UMAP reduction was found in the selected Seurat object. Expected HarmonyUMAP or umap."))
-
   features <- unique(as.character(features))
-  features <- features[features %in% rownames(obj)]
-  validate(need(length(features) > 0, "None of the selected genes were found in the Seurat object."))
+  features <- features[features %in% atlas_features(obj)]
+  validate(need(length(features) > 0, "None of the selected genes were found in the loaded atlas object."))
 
-  coords <- Embeddings(obj, reduction = reduction_to_use)
-  validate(need(ncol(coords) >= 2, "The selected reduction does not have two dimensions."))
-  coords <- as.data.frame(coords[, 1:2, drop = FALSE])
-  colnames(coords) <- c("UMAP_1", "UMAP_2")
+  coords <- atlas_coords(obj)
+  md <- atlas_meta(obj)
 
-  label_values <- if ("final_celltype" %in% colnames(obj@meta.data)) {
-    as.character(obj@meta.data$final_celltype)
+  label_values <- if ("final_celltype" %in% colnames(md)) {
+    as.character(md$final_celltype)
   } else {
-    as.character(Idents(obj))
+    fallback_group <- default_group_var(obj)
+    validate(need(!is.null(fallback_group) && fallback_group %in% colnames(md), "No grouping column is available for feature-plot labels."))
+    as.character(md[[fallback_group]])
   }
   label_values[is.na(label_values) | !nzchar(label_values)] <- "NA"
 
@@ -1120,7 +1324,7 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
     ]
   }
 
-  expr <- FetchData(obj, vars = features)
+  expr <- as.data.frame(t(as.matrix(atlas_fetch_expression(obj, features = features, cells = rownames(md)))), stringsAsFactors = FALSE)
 
   plot_df <- do.call(
     rbind,
@@ -1163,8 +1367,8 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
     ) +
     facet_wrap(~feature, ncol = min(2, length(features))) +
     labs(
-      x = paste0(reduction_to_use, "_1"),
-      y = paste0(reduction_to_use, "_2")
+      x = "UMAP_1",
+      y = "UMAP_2"
     ) +
     coord_cartesian(xlim = xlim, ylim = ylim) +
     theme_minimal(base_size = 12) +
@@ -1212,7 +1416,11 @@ violin_display_label <- function(var_name) {
     "dataset" = "Cohort",
     "final_celltype" = "Cell Type"
   )
-  unname(labels[[var_name]] %||% var_name)
+  hit <- labels[var_name]
+  if (length(hit) == 0 || is.na(hit)) {
+    return(var_name)
+  }
+  unname(hit)
 }
 
 violin_factor_levels <- function(values, var_name) {
@@ -1313,11 +1521,18 @@ geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", po
 
 plot_violin_expression <- function(obj, features, group_var, split_var = NULL) {
   features <- unique(as.character(features))
-  features <- features[features %in% rownames(obj)]
-  validate(need(length(features) > 0, "None of the selected genes were found in the Seurat object."))
-  vars_to_fetch <- unique(c(features, group_var, split_var))
-  plot_data <- FetchData(obj, vars = vars_to_fetch)
-  plot_data$cell_id <- rownames(plot_data)
+  features <- features[features %in% atlas_features(obj)]
+  validate(need(length(features) > 0, "None of the selected genes were found in the loaded atlas object."))
+
+  md <- atlas_meta(obj)
+  validate(need(group_var %in% colnames(md), "Selected grouping column is not available."))
+  if (!is.null(split_var)) {
+    validate(need(split_var %in% colnames(md), "Selected split column is not available."))
+  }
+  expr <- as.matrix(atlas_fetch_expression(obj, features = features, cells = rownames(md)))
+  expr <- t(expr)
+  plot_data <- cbind(md[, unique(c(group_var, split_var)), drop = FALSE], as.data.frame(expr, stringsAsFactors = FALSE))
+  plot_data$cell_id <- rownames(md)
 
   validate(need(group_var %in% colnames(plot_data), "Selected grouping column is not available."))
   plot_data[[group_var]] <- factor(
@@ -1389,26 +1604,17 @@ plot_violin_expression <- function(obj, features, group_var, split_var = NULL) {
     )
   }
 
-  md <- obj[[]]
-  md[[group_var]] <- factor(
-    as.character(md[[group_var]]),
-    levels = violin_factor_levels(md[[group_var]], group_var)
-  )
-  obj@meta.data <- md
-  Idents(obj) <- obj[[group_var, drop = TRUE]]
-
   if (is.null(split_var)) {
-    cols <- unname(violin_palette_for_var(group_var, levels(Idents(obj)))[levels(Idents(obj))])
+    group_levels <- violin_factor_levels(df_long[[group_var]], group_var)
+    fill_palette <- violin_palette_for_var(group_var, group_levels)[group_levels]
     return(
-      Seurat::VlnPlot(
-        object = obj,
-        features = features,
-        group.by = group_var,
-        cols = cols,
-        stack = FALSE,
-        combine = TRUE,
-        pt.size = 0
+      ggplot(
+        df_long,
+        aes(x = .data[[group_var]], y = .data[["expression"]], fill = .data[[group_var]])
       ) +
+        geom_violin(trim = TRUE, scale = "width", color = "grey20", linewidth = 0.2) +
+        scale_fill_manual(values = fill_palette, drop = FALSE, name = violin_display_label(group_var)) +
+        facet_wrap(~feature, ncol = min(2, length(features)), scales = "free_y") +
         labs(
           x = violin_display_label(group_var),
           y = "Expression Level",
@@ -1421,27 +1627,57 @@ plot_violin_expression <- function(obj, features, group_var, split_var = NULL) {
     )
   }
 
-  split_values <- as.character(obj[[split_var, drop = TRUE]])
+  split_values <- as.character(df_long[[split_var]])
   split_levels <- violin_factor_levels(split_values, split_var)
-  obj[[split_var]] <- factor(split_values, levels = split_levels)
   cols <- unname(violin_palette_for_var(split_var, split_levels)[split_levels])
+  df_long[[split_var]] <- factor(as.character(df_long[[split_var]]), levels = split_levels)
 
-  Seurat::VlnPlot(
-    object = obj,
-    features = features,
-    group.by = group_var,
-    split.by = split_var,
-    split.plot = length(split_levels) <= 2,
-    cols = cols,
-    stack = FALSE,
-    combine = TRUE,
-    pt.size = 0
+  if (length(split_levels) <= 2) {
+    df_long$.split_group <- interaction(df_long[[group_var]], df_long[[split_var]], lex.order = TRUE, drop = TRUE)
+    return(
+      ggplot(
+        df_long,
+        aes(
+          x = .data[[group_var]],
+          y = .data[["expression"]],
+          fill = .data[[split_var]],
+          group = .data[[".split_group"]]
+        )
+      ) +
+        geom_split_violin(
+          trim = TRUE,
+          scale = "width",
+          color = "grey20",
+          linewidth = 0.2
+        ) +
+        scale_fill_manual(values = cols, drop = FALSE, name = violin_display_label(split_var)) +
+        facet_wrap(~feature, ncol = min(2, length(features)), scales = "free_y") +
+        labs(
+          x = violin_display_label(group_var),
+          y = "Expression Level",
+          fill = violin_display_label(split_var)
+        ) +
+        theme_minimal(base_size = 12) +
+        theme(
+          axis.title = element_text(face = "bold"),
+          legend.position = "right"
+        )
+    )
+  }
+
+  ggplot(
+    df_long,
+    aes(x = .data[[group_var]], y = .data[["expression"]], fill = .data[[split_var]])
   ) +
+    geom_violin(trim = TRUE, scale = "width", color = "grey20", linewidth = 0.2, position = position_dodge(width = 0.85)) +
+    scale_fill_manual(values = cols, drop = FALSE, name = violin_display_label(split_var)) +
+    facet_wrap(~feature, ncol = min(2, length(features)), scales = "free_y") +
     labs(
       x = violin_display_label(group_var),
       y = "Expression Level",
       fill = violin_display_label(split_var)
     ) +
+    theme_minimal(base_size = 12) +
     theme(
       axis.title = element_text(face = "bold"),
       legend.position = "right"
@@ -1782,9 +2018,9 @@ build_average_heatmap_data_live <- function(
   mode <- match.arg(mode)
   validate(need(length(genes) > 0, "Choose at least one gene."))
 
-  assay_name <- DefaultAssay(obj)
-  expr <- GetAssayData(obj, assay = assay_name, slot = "data")
-  md <- obj@meta.data
+  assay_name <- atlas_default_assay(obj)
+  expr <- atlas_expr_matrix(obj)
+  md <- atlas_meta(obj)
 
   if ("final_celltype" %in% colnames(md) && length(selected_celltypes %||% character(0)) > 0) {
     md <- md[md$final_celltype %in% selected_celltypes, , drop = FALSE]
@@ -2024,6 +2260,9 @@ plot_average_heatmap_from_script <- function(heatmap_data) {
 }
 
 get_expr_slot_safe <- function(obj, assay_name, slot_name) {
+  if (is_atlas_runtime_bundle(obj)) {
+    return(atlas_expr_matrix(obj))
+  }
   out <- tryCatch(
     GetAssayData(obj, assay = assay_name, layer = slot_name),
     error = function(e) NULL
@@ -2047,8 +2286,9 @@ calc_sample_expression_pct <- function(obj, genes, assay_name, slot_name, thresh
     return(tibble::tibble(gene = genes, pct_samples_expressed = 0))
   }
 
-  sample_ids <- obj@meta.data[[sample_col]]
-  names(sample_ids) <- rownames(obj@meta.data)
+  meta <- atlas_meta(obj)
+  sample_ids <- meta[[sample_col]]
+  names(sample_ids) <- rownames(meta)
   sample_ids <- sample_ids[colnames(expr_all)]
   valid_cells <- !is.na(sample_ids) & nzchar(as.character(sample_ids))
   if (!is.null(keep_cells)) {
@@ -2082,10 +2322,11 @@ calc_sample_expression_pct <- function(obj, genes, assay_name, slot_name, thresh
 }
 
 calc_quadrant_specific_sample_pct <- function(obj, fc_tbl, assay_name, slot_name, threshold, sample_col, group_col) {
-  validate(need(group_col %in% colnames(obj@meta.data), paste0("Metadata column '", group_col, "' is required for quadrant-specific sample percentages.")))
+  meta <- atlas_meta(obj)
+  validate(need(group_col %in% colnames(meta), paste0("Metadata column '", group_col, "' is required for quadrant-specific sample percentages.")))
 
-  group_values <- as.character(obj@meta.data[[group_col]])
-  cell_ids <- rownames(obj@meta.data)
+  group_values <- as.character(meta[[group_col]])
+  cell_ids <- rownames(meta)
 
   cell_sets <- list(
     "Q1 (+/+) GC_all" = cell_ids[grepl("_Primary$", group_values)],
@@ -2127,13 +2368,14 @@ calc_group_fc <- function(
   normal_celltypes,
   pseudocount = 1e-3
 ) {
-  sel <- obj@meta.data[[group_col]] %in% paste0(path_group, c("_Primary", "_Normal"))
+  meta <- atlas_meta(obj)
+  sel <- meta[[group_col]] %in% paste0(path_group, c("_Primary", "_Normal"))
   if (!any(sel)) {
     return(NULL)
   }
 
-  sub_obj <- subset(obj, cells = rownames(obj@meta.data)[sel])
-  md <- sub_obj@meta.data
+  sub_obj <- atlas_subset_cells(obj, cells = rownames(meta)[sel])
+  md <- atlas_meta(sub_obj)
   md$pn_group <- dplyr::case_when(
     md[[celltype_col]] %in% primary_celltypes ~ "Primary",
     md[[celltype_col]] %in% normal_celltypes ~ "Normal",
@@ -2176,11 +2418,12 @@ build_quadrant_fc_cache <- function(
   group_col = "final_group",
   pseudocount = 1e-3
 ) {
-  validate(need(celltype_col %in% colnames(obj@meta.data), paste0("Metadata column '", celltype_col, "' is not available.")))
-  validate(need(group_col %in% colnames(obj@meta.data), paste0("Metadata column '", group_col, "' is not available.")))
+  meta <- atlas_meta(obj)
+  validate(need(celltype_col %in% colnames(meta), paste0("Metadata column '", celltype_col, "' is not available.")))
+  validate(need(group_col %in% colnames(meta), paste0("Metadata column '", group_col, "' is not available.")))
 
-  assay_to_use <- assay_name %||% DefaultAssay(obj)
-  genes_to_use <- unique(as.character(genes_to_use %||% rownames(obj)))
+  assay_to_use <- assay_name %||% atlas_default_assay(obj)
+  genes_to_use <- unique(as.character(genes_to_use %||% atlas_features(obj)))
   genes_to_use <- genes_to_use[!is.na(genes_to_use) & nzchar(genes_to_use)]
 
   diffuse_fc <- calc_group_fc(
@@ -2269,7 +2512,7 @@ read_diffuse_intestinal_deg_cache <- function(source_path) {
 }
 
 deg_cluster_column <- function(obj) {
-  if ("final_celltype" %in% colnames(obj@meta.data)) {
+  if ("final_celltype" %in% colnames(atlas_meta(obj))) {
     return("final_celltype")
   }
   NULL
@@ -2444,18 +2687,19 @@ plot_diffuse_intestinal_volcano <- function(
 }
 
 default_quadrant_sample_col <- function(obj) {
-  if ("sampleID" %in% colnames(obj@meta.data)) {
+  if ("sampleID" %in% colnames(atlas_meta(obj))) {
     return("sampleID")
   }
   NULL
 }
 
 quadrant_sample_denominators <- function(obj, sample_col = "sampleID", group_col = "final_group") {
-  validate(need(sample_col %in% colnames(obj@meta.data), paste0("Metadata column '", sample_col, "' is required for the quadrant scatter.")))
-  validate(need(group_col %in% colnames(obj@meta.data), paste0("Metadata column '", group_col, "' is required for the quadrant scatter.")))
+  meta <- atlas_meta(obj)
+  validate(need(sample_col %in% colnames(meta), paste0("Metadata column '", sample_col, "' is required for the quadrant scatter.")))
+  validate(need(group_col %in% colnames(meta), paste0("Metadata column '", group_col, "' is required for the quadrant scatter.")))
 
-  group_values <- as.character(obj@meta.data[[group_col]])
-  sample_values <- as.character(obj@meta.data[[sample_col]])
+  group_values <- as.character(meta[[group_col]])
+  sample_values <- as.character(meta[[sample_col]])
 
   count_samples <- function(mask) {
     vals <- unique(sample_values[mask & !is.na(sample_values) & nzchar(sample_values)])
@@ -2509,10 +2753,10 @@ build_quadrant_deg_base_from_cache <- function(
   validate(need(!is.null(cache$fc_tbl), "Quadrant cache is missing the FC table."))
 
   sample_col <- sample_col %||% default_quadrant_sample_col(obj)
-  validate(need(!is.null(sample_col) && sample_col %in% colnames(obj@meta.data), "A patient/sample column is required for the quadrant scatter."))
+  validate(need(!is.null(sample_col) && sample_col %in% colnames(atlas_meta(obj)), "A patient/sample column is required for the quadrant scatter."))
 
   sample_expr_slot <- sample_expr_slot %||% cache$slot_name %||% "data"
-  assay_to_use <- cache$assay_name %||% DefaultAssay(obj)
+  assay_to_use <- cache$assay_name %||% atlas_default_assay(obj)
 
   plot_df <- cache$fc_tbl |>
     dplyr::filter(is.finite(diffuse_fc), is.finite(intestinal_fc))

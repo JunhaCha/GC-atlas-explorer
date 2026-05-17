@@ -62,7 +62,7 @@ violin_choice_blacklist <- c(
 )
 
 filtered_violin_choices <- function(obj) {
-  cols <- colnames(obj[[]])
+  cols <- colnames(atlas_meta(obj))
   cols[!cols %in% violin_choice_blacklist]
 }
 
@@ -91,13 +91,13 @@ materialize_violin_grouping <- function(obj, group_var, split_var) {
   out <- obj
 
   if (identical(group_var, ".violin_pathology_group") || identical(split_var, ".violin_pathology_group")) {
-    validate(need("final_group" %in% colnames(out[[]]), "final_group is required for the default violin grouping."))
-    out$.violin_pathology_group <- derive_violin_pathology_group(out$final_group)
+    validate(need("final_group" %in% colnames(atlas_meta(out)), "final_group is required for the default violin grouping."))
+    out <- atlas_set_meta_column(out, ".violin_pathology_group", derive_violin_pathology_group(out$final_group))
   }
 
   if (identical(group_var, ".violin_gc_status") || identical(split_var, ".violin_gc_status")) {
-    validate(need("final_group" %in% colnames(out[[]]), "final_group is required for the default violin split."))
-    out$.violin_gc_status <- derive_violin_gc_status(out$final_group)
+    validate(need("final_group" %in% colnames(atlas_meta(out)), "final_group is required for the default violin split."))
+    out <- atlas_set_meta_column(out, ".violin_gc_status", derive_violin_gc_status(out$final_group))
   }
 
   out
@@ -131,7 +131,7 @@ gene_explorer_server <- function(id, loaded) {
           stats::setNames(violin_choices, violin_choices)
         ),
         selected = {
-          if ("final_group" %in% colnames(loaded()$obj[[]])) {
+          if ("final_group" %in% colnames(atlas_meta(loaded()$obj))) {
             ".violin_pathology_group"
           } else {
             preferred <- c("rev_pathological_subtype")
@@ -148,9 +148,9 @@ gene_explorer_server <- function(id, loaded) {
           "Normal vs matched GC (from final_group)" = ".violin_gc_status",
           stats::setNames(violin_choices, violin_choices)
         ),
-        selected = if ("final_group" %in% colnames(loaded()$obj[[]])) ".violin_gc_status" else if ("rev_condition" %in% violin_choices) "rev_condition" else ""
+        selected = if ("final_group" %in% colnames(atlas_meta(loaded()$obj))) ".violin_gc_status" else if ("rev_condition" %in% violin_choices) "rev_condition" else ""
       )
-      if ("final_celltype" %in% colnames(loaded()$obj[[]])) {
+      if ("final_celltype" %in% colnames(atlas_meta(loaded()$obj))) {
         updateSelectizeInput(
           session,
           "violin_celltypes",
@@ -209,15 +209,15 @@ gene_explorer_server <- function(id, loaded) {
       obj_to_plot <- loaded()$obj
       selected_celltypes <- input$violin_celltypes %||% character(0)
       if (length(selected_celltypes) > 0) {
-        validate(need("final_celltype" %in% colnames(obj_to_plot[[]]), "final_celltype column is not available for violin filtering."))
-        keep_cells <- rownames(obj_to_plot[[]])[as.character(obj_to_plot$final_celltype) %in% selected_celltypes]
+        validate(need("final_celltype" %in% colnames(atlas_meta(obj_to_plot)), "final_celltype column is not available for violin filtering."))
+        keep_cells <- rownames(atlas_meta(obj_to_plot))[as.character(obj_to_plot$final_celltype) %in% selected_celltypes]
         validate(need(length(keep_cells) > 0, "No cells remain after applying the selected cell-type filter."))
-        obj_to_plot <- subset(obj_to_plot, cells = keep_cells)
+        obj_to_plot <- atlas_subset_cells(obj_to_plot, cells = keep_cells)
       }
       obj_to_plot <- materialize_violin_grouping(obj_to_plot, input$group_by, split_var)
-      validate(need(input$group_by %in% colnames(obj_to_plot[[]]), "Selected grouping column is not available."))
+      validate(need(input$group_by %in% colnames(atlas_meta(obj_to_plot)), "Selected grouping column is not available."))
       if (!is.null(split_var)) {
-        validate(need(split_var %in% colnames(obj_to_plot[[]]), "Selected split column is not available."))
+        validate(need(split_var %in% colnames(atlas_meta(obj_to_plot)), "Selected split column is not available."))
       }
 
       plot_violin_expression(
