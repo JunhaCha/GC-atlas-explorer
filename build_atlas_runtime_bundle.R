@@ -38,11 +38,16 @@ get_arg <- function(args, name, default = NULL, required = FALSE) {
 
 args <- parse_args()
 input_path <- normalizePath(get_arg(args, "input", required = TRUE), winslash = "/", mustWork = TRUE)
-bundle_path <- normalizePath(get_arg(args, "bundle", default = sub("\\.rds$", "_atlas_bundle.rds", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
-expr_path <- normalizePath(get_arg(args, "expr", default = sub("\\.rds$", "_atlas_expr_sparse.rds", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
-meta_path <- normalizePath(get_arg(args, "meta", default = sub("\\.rds$", "_atlas_meta.parquet", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
-umap_path <- normalizePath(get_arg(args, "umap", default = sub("\\.rds$", "_atlas_umap.parquet", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
+bundle_path <- normalizePath(get_arg(args, "bundle", default = sub("\\.rds$", "_atlas_bundle_v2.rds", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
+meta_path <- normalizePath(get_arg(args, "meta", default = sub("\\.rds$", "_atlas_meta_v2.parquet", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
+umap_path <- normalizePath(get_arg(args, "umap", default = sub("\\.rds$", "_atlas_umap_v2.parquet", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
+gene_dir <- normalizePath(get_arg(args, "gene-dir", default = sub("\\.rds$", "_atlas_gene_expr_v2", input_path, ignore.case = TRUE)), winslash = "/", mustWork = FALSE)
+gene_manifest_path <- normalizePath(get_arg(args, "gene-manifest", default = file.path(gene_dir, "gene_manifest.rds")), winslash = "/", mustWork = FALSE)
 assay_name <- get_arg(args, "assay", default = "RNA")
+block_size <- as.integer(get_arg(args, "block-size", default = "128"))
+if (!is.finite(block_size) || block_size <= 0) {
+  stop("--block-size must be a positive integer.")
+}
 
 script_path <- normalizePath(
   sub("^--file=", "", grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)[1]),
@@ -82,14 +87,33 @@ if (!inherits(expr, "dgCMatrix")) {
   expr <- as(expr, "dgCMatrix")
 }
 
+dir.create(gene_dir, recursive = TRUE, showWarnings = FALSE)
+
+n_genes <- nrow(expr)
+block_ids <- ((seq_len(n_genes) - 1L) %/% block_size) + 1L
+gene_manifest <- data.frame(
+  gene = rownames(expr),
+  block_id = block_ids,
+  row_in_block = ave(seq_len(n_genes), block_ids, FUN = seq_along),
+  file_name = sprintf("block_%05d.rds", block_ids),
+  stringsAsFactors = FALSE
+)
+
+message("Writing atlas expression block assets: ", gene_dir)
+for (block_id in unique(block_ids)) {
+  idx <- which(block_ids == block_id)
+  block_mat <- expr[idx, , drop = FALSE]
+  saveRDS(block_mat, file.path(gene_dir, sprintf("block_%05d.rds", block_id)), compress = TRUE)
+}
+
+message("Writing atlas gene manifest: ", gene_manifest_path)
+saveRDS(gene_manifest, gene_manifest_path, compress = TRUE)
+
 message("Writing atlas metadata parquet: ", meta_path)
 arrow::write_parquet(meta_out, sink = meta_path)
 
 message("Writing atlas UMAP parquet: ", umap_path)
 arrow::write_parquet(umap_out, sink = umap_path)
-
-message("Writing sparse expression matrix: ", expr_path)
-saveRDS(expr, expr_path, compress = TRUE)
 
 bundle <- structure(
   list(
@@ -102,7 +126,10 @@ bundle <- structure(
     n_cells = nrow(meta),
     meta_colnames = colnames(meta),
     features = rownames(expr),
-    expr_path = expr_path
+    gene_dir = gene_dir,
+    gene_manifest_path = gene_manifest_path,
+    gene_storage = "rds_sparse_block",
+    gene_block_size = block_size
   ),
   class = "atlas_runtime_bundle"
 )

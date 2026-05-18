@@ -257,10 +257,26 @@ deg_server <- function(id, loaded) {
           textInput(ns("force_label_genes"), "Force-label genes", placeholder = "Comma-separated genes")
         )
       } else {
+        df <- deg_table_raw()
+        cluster_choices <- if ("cluster" %in% colnames(df)) {
+          sort(unique(as.character(df$cluster)))
+        } else {
+          character(0)
+        }
+        selected_cluster <- isolate(input$volcano_cluster %||% character(0))
+        if (length(selected_cluster) != 1 || !nzchar(selected_cluster) || !selected_cluster %in% cluster_choices) {
+          selected_cluster <- cluster_choices[[1]] %||% character(0)
+        }
+
         tagList(
           tags$hr(),
           h5("Diffuse vs Intestinal Volcano"),
-          selectInput(ns("volcano_cluster"), "Volcano cell type", choices = character(0)),
+          selectInput(
+            ns("volcano_cluster"),
+            "Volcano cell type",
+            choices = cluster_choices,
+            selected = selected_cluster
+          ),
           tags$div(
             class = "small-note",
             "Uses precomputed sample-level Wilcoxon DEG results comparing Diffuse_* vs Intestinal_* pseudobulk averages within the selected cell type."
@@ -286,14 +302,6 @@ deg_server <- function(id, loaded) {
 
       updateSelectizeInput(session, "cluster_filter", choices = cluster_choices, selected = character(0), server = FALSE)
       updateSelectizeInput(session, "gene_filter", choices = gene_choices, selected = character(0), server = FALSE)
-      if (identical(deg_mode(), "diffuse_intestinal")) {
-        updateSelectInput(
-          session,
-          "volcano_cluster",
-          choices = cluster_choices,
-          selected = cluster_choices[[1]] %||% character(0)
-        )
-      }
     }, ignoreInit = FALSE)
 
     filtered_deg <- reactive({

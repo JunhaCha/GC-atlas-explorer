@@ -7,7 +7,7 @@ umap_ui <- function(id) {
         width = 3,
         tags$p(
           class = "small-note",
-          "UMAP is drawn from the HarmonyUMAP reduction stored in the Seurat object."
+          "UMAP is drawn from the precomputed lineage embedding stored in the atlas runtime bundle."
         ),
         selectInput(
           ns("color_mode"),

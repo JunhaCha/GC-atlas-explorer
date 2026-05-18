@@ -48,7 +48,7 @@ data_loader_server <- function(id, object_choices = NULL) {
       obj = NULL,
       path = NULL,
       source_path = NULL,
-      status = "Load a Seurat .rds file to begin."
+      status = "Load a cell lineage to begin."
     )
 
     load_selected_object <- function() {

@@ -399,49 +399,21 @@ color_rds_paths <- c(
 safe_seurat_read <- function(path) {
   path <- normalizePath(path, winslash = "/", mustWork = FALSE)
   bundle_path <- matching_atlas_bundle_path(path)
-  if (!identical(bundle_path, path) && file.exists(bundle_path)) {
-    cache_key <- bundle_path
-    if (exists(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE)) {
-      return(get(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE))
-    }
-    obj <- cached_read_rds(bundle_path)
-    validate(need(is_atlas_runtime_bundle(obj), "Atlas runtime bundle file is not in the expected format."))
-    assign(cache_key, obj, envir = .gc_seurat_object_cache)
-    return(obj)
-  }
-
-  if (!file.exists(path)) {
-    stop("Selected file does not exist.")
-  }
-  if (isTRUE(file.info(path)$size == 0)) {
-    stop("Selected file exists but is empty right now. If it is still copying, try again when the transfer finishes.")
-  }
-  file_size_gb <- file.info(path)$size / 1024^3
-  slim_path <- sub("\\.rds$", "_app_slim.rds", path, ignore.case = TRUE)
-  if (!grepl("_app_slim\\.rds$", path, ignore.case = TRUE) &&
-      is.finite(file_size_gb) &&
-      file_size_gb >= 10 &&
-      !file.exists(slim_path)) {
-    stop(
+  validate(
+    need(
+      !identical(bundle_path, path) && file.exists(bundle_path),
       paste0(
-        "This raw Seurat object is very large (",
-        sprintf("%.1f", file_size_gb),
-        " GB). Create the app-specific slim file first:\n",
-        "Rscript ", app_script_path("slim_seurat_for_app.R"), " ",
-        "--input ", path, " ",
-        "--output ", slim_path
+        "Atlas runtime bundle was not found for this lineage. Build it first:\n",
+        "Rscript ", app_script_path("build_all_atlas_runtime_bundles.R")
       )
     )
-  }
-  cache_key <- path
+  )
+  cache_key <- bundle_path
   if (exists(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE)) {
     return(get(cache_key, envir = .gc_seurat_object_cache, inherits = FALSE))
   }
-
-  obj <- readRDS(path)
-  if (!inherits(obj, "Seurat")) {
-    stop("The selected RDS file is not a Seurat object.")
-  }
+  obj <- cached_read_rds(bundle_path)
+  validate(need(is_atlas_runtime_bundle(obj), "Atlas runtime bundle file is not in the expected format."))
   assign(cache_key, obj, envir = .gc_seurat_object_cache)
   obj
 }
@@ -454,6 +426,10 @@ safe_seurat_read <- function(path) {
 matching_atlas_bundle_path <- function(path) {
   if (is.null(path) || !nzchar(path)) {
     return(path)
+  }
+  v2_path <- sub("\\.rds$", "_atlas_bundle_v2.rds", path, ignore.case = TRUE)
+  if (file.exists(v2_path)) {
+    return(v2_path)
   }
   sub("\\.rds$", "_atlas_bundle.rds", path, ignore.case = TRUE)
 }
@@ -493,6 +469,15 @@ atlas_bundle_meta_df <- function(obj) {
   rownames(meta) <- as.character(meta$cell_id)
   meta$cell_id <- NULL
   meta
+}
+
+atlas_bundle_base_cells <- function(obj) {
+  manifest <- atlas_bundle_manifest(obj)
+  meta_path <- manifest[["meta_path"]] %||% NULL
+  validate(need(!is.null(meta_path) && file.exists(meta_path), "Metadata parquet for the atlas runtime bundle was not found."))
+  meta <- cached_read_parquet(meta_path)
+  validate(need("cell_id" %in% colnames(meta), "Atlas metadata parquet must contain a cell_id column."))
+  as.character(meta$cell_id)
 }
 
 atlas_bundle_umap_df <- function(obj) {
@@ -539,7 +524,7 @@ atlas_reduction_name <- function(obj) {
 
 atlas_features <- function(obj) {
   if (is_atlas_runtime_bundle(obj)) {
-    return(atlas_bundle_manifest(obj)$features %||% character(0))
+    return(atlas_bundle_manifest(obj)[["features"]] %||% character(0))
   }
   rownames(obj)
 }
@@ -564,23 +549,106 @@ atlas_coords <- function(obj) {
   coords
 }
 
+atlas_gene_manifest <- function(obj) {
+  if (!is_atlas_runtime_bundle(obj)) {
+    return(NULL)
+  }
+  manifest_path <- atlas_bundle_manifest(obj)[["gene_manifest_path"]] %||% NULL
+  validate(need(!is.null(manifest_path) && file.exists(manifest_path), "Gene-expression manifest for the atlas runtime bundle was not found."))
+  cached_read_rds(manifest_path)
+}
+
+atlas_gene_expression_path <- function(obj, gene) {
+  validate(need(is_atlas_runtime_bundle(obj), "Per-gene atlas expression paths are only available for atlas runtime bundles."))
+  manifest <- atlas_gene_manifest(obj)
+  row <- manifest[manifest$gene %in% gene, , drop = FALSE]
+  validate(need(nrow(row) == 1, paste0("Gene '", gene, "' is not available in the atlas runtime bundle.")))
+  gene_dir <- atlas_bundle_manifest(obj)[["gene_dir"]] %||% NULL
+  validate(need(!is.null(gene_dir) && dir.exists(gene_dir), "Gene-expression directory for the atlas runtime bundle was not found."))
+  normalizePath(file.path(gene_dir, row$file_name[[1]]), winslash = "/", mustWork = FALSE)
+}
+
 atlas_expr_matrix <- function(obj) {
   if (is_atlas_runtime_bundle(obj)) {
-    expr_path <- atlas_bundle_manifest(obj)$expr_path %||% NULL
-    validate(need(!is.null(expr_path) && file.exists(expr_path), "Expression matrix file for the atlas runtime bundle was not found."))
-    return(cached_read_rds(expr_path))
+    stop("Full expression matrices are not loaded at runtime for atlas bundles; use atlas_fetch_expression().", call. = FALSE)
   }
   get_expr_slot_safe(obj, atlas_default_assay(obj), "data")
 }
 
 atlas_fetch_expression <- function(obj, features, cells = NULL) {
-  expr <- atlas_expr_matrix(obj)
-  feature_ids <- intersect(unique(as.character(features)), rownames(expr))
+  feature_ids <- unique(as.character(features))
+  feature_ids <- feature_ids[feature_ids %in% atlas_features(obj)]
   validate(need(length(feature_ids) > 0, "None of the selected genes were found in the loaded atlas object."))
-  cell_ids <- cells %||% colnames(expr)
-  cell_ids <- intersect(as.character(cell_ids), colnames(expr))
+
+  if (!is_atlas_runtime_bundle(obj)) {
+    expr <- get_expr_slot_safe(obj, atlas_default_assay(obj), "data")
+    cell_ids <- cells %||% colnames(expr)
+    cell_ids <- intersect(as.character(cell_ids), colnames(expr))
+    validate(need(length(cell_ids) > 0, "No cells remain after filtering."))
+    return(expr[feature_ids, cell_ids, drop = FALSE])
+  }
+
+  full_cells <- atlas_bundle_base_cells(obj)
+  requested_cells <- cells %||% atlas_cells(obj)
+  cell_ids <- intersect(as.character(requested_cells), full_cells)
   validate(need(length(cell_ids) > 0, "No cells remain after filtering."))
-  expr[feature_ids, cell_ids, drop = FALSE]
+
+  use_all_cells <- identical(cell_ids, full_cells)
+  cell_positions <- if (use_all_cells) seq_along(full_cells) else match(cell_ids, full_cells)
+  position_map <- NULL
+  if (!use_all_cells) {
+    position_map <- integer(length(full_cells))
+    position_map[cell_positions] <- seq_along(cell_positions)
+  }
+
+  out <- matrix(
+    0,
+    nrow = length(feature_ids),
+    ncol = length(cell_ids),
+    dimnames = list(feature_ids, cell_ids)
+  )
+
+  manifest <- atlas_gene_manifest(obj)
+  manifest <- manifest[manifest$gene %in% feature_ids, , drop = FALSE]
+  validate(need(nrow(manifest) > 0, "None of the selected genes were found in the atlas runtime bundle."))
+
+  storage_mode <- atlas_bundle_manifest(obj)[["gene_storage"]] %||% "rds_sparse_block"
+  if (identical(storage_mode, "rds_sparse_vector")) {
+    for (i in seq_along(feature_ids)) {
+      asset <- cached_read_rds(atlas_gene_expression_path(obj, feature_ids[[i]]))
+      if (length(asset$index) == 0) {
+        next
+      }
+      if (use_all_cells) {
+        out[i, asset$index] <- asset$value
+      } else {
+        out_idx <- position_map[asset$index]
+        keep <- out_idx > 0
+        if (any(keep)) {
+          out[i, out_idx[keep]] <- asset$value[keep]
+        }
+      }
+    }
+    return(out)
+  }
+
+  for (file_name in unique(manifest$file_name)) {
+    block_path <- normalizePath(file.path(atlas_bundle_manifest(obj)[["gene_dir"]], file_name), winslash = "/", mustWork = FALSE)
+    block_mat <- cached_read_rds(block_path)
+    gene_rows <- manifest[manifest$file_name %in% file_name, , drop = FALSE]
+    genes_in_block <- intersect(as.character(gene_rows$gene), rownames(block_mat))
+    if (length(genes_in_block) == 0) {
+      next
+    }
+    block_subset <- block_mat[genes_in_block, , drop = FALSE]
+    if (!use_all_cells) {
+      block_subset <- block_subset[, cell_positions, drop = FALSE]
+    }
+    row_idx <- match(genes_in_block, rownames(out))
+    out[row_idx, seq_len(ncol(out))] <- as.matrix(block_subset)
+  }
+
+  out
 }
 
 atlas_subset_cells <- function(obj, cells) {
@@ -2018,20 +2086,17 @@ build_average_heatmap_data_live <- function(
   mode <- match.arg(mode)
   validate(need(length(genes) > 0, "Choose at least one gene."))
 
-  assay_name <- atlas_default_assay(obj)
-  expr <- atlas_expr_matrix(obj)
   md <- atlas_meta(obj)
 
   if ("final_celltype" %in% colnames(md) && length(selected_celltypes %||% character(0)) > 0) {
     md <- md[md$final_celltype %in% selected_celltypes, , drop = FALSE]
-    expr <- expr[, rownames(md), drop = FALSE]
   }
 
-  validate(need(ncol(expr) > 0, "No cells remain after filtering."))
+  validate(need(nrow(md) > 0, "No cells remain after filtering."))
 
-  genes_found <- intersect(genes, rownames(expr))
+  genes_found <- intersect(genes, atlas_features(obj))
   validate(need(length(genes_found) > 0, "None of the selected genes are present in the Seurat object."))
-  expr <- expr[genes_found, , drop = FALSE]
+  expr <- atlas_fetch_expression(obj, features = genes_found, cells = rownames(md))
 
   subtype_colors <- c(
     Diffuse = "#E41A1C",
@@ -2261,7 +2326,7 @@ plot_average_heatmap_from_script <- function(heatmap_data) {
 
 get_expr_slot_safe <- function(obj, assay_name, slot_name) {
   if (is_atlas_runtime_bundle(obj)) {
-    return(atlas_expr_matrix(obj))
+    stop("Full expression matrices are not available at runtime for atlas bundles.", call. = FALSE)
   }
   out <- tryCatch(
     GetAssayData(obj, assay = assay_name, layer = slot_name),
@@ -2280,26 +2345,29 @@ calc_sample_expression_pct <- function(obj, genes, assay_name, slot_name, thresh
     return(tibble::tibble(gene = character(), pct_samples_expressed = numeric()))
   }
 
-  expr_all <- get_expr_slot_safe(obj, assay_name, slot_name)
-  genes_present <- intersect(genes, rownames(expr_all))
+  genes_present <- intersect(genes, atlas_features(obj))
   if (length(genes_present) == 0) {
     return(tibble::tibble(gene = genes, pct_samples_expressed = 0))
   }
 
   meta <- atlas_meta(obj)
+  validate(need(sample_col %in% colnames(meta), paste0("Metadata column '", sample_col, "' is required for sample-percentage calculations.")))
   sample_ids <- meta[[sample_col]]
   names(sample_ids) <- rownames(meta)
-  sample_ids <- sample_ids[colnames(expr_all)]
-  valid_cells <- !is.na(sample_ids) & nzchar(as.character(sample_ids))
+  valid_cells <- rownames(meta)
   if (!is.null(keep_cells)) {
-    valid_cells <- valid_cells & colnames(expr_all) %in% keep_cells
+    valid_cells <- intersect(valid_cells, as.character(keep_cells))
   }
-  if (!any(valid_cells)) {
+  sample_ids <- sample_ids[valid_cells]
+  valid_keep <- !is.na(sample_ids) & nzchar(as.character(sample_ids))
+  valid_cells <- valid_cells[valid_keep]
+  sample_ids <- sample_ids[valid_keep]
+  if (length(valid_cells) == 0) {
     return(tibble::tibble(gene = genes, pct_samples_expressed = 0))
   }
 
-  expr <- expr_all[genes_present, valid_cells, drop = FALSE]
-  sample_ids <- as.character(sample_ids[valid_cells])
+  expr <- atlas_fetch_expression(obj, features = genes_present, cells = valid_cells)
+  sample_ids <- as.character(sample_ids)
   sample_levels <- sort(unique(sample_ids))
   sample_factor <- factor(sample_ids, levels = sample_levels)
   sample_index <- as.integer(sample_factor)
@@ -2356,6 +2424,33 @@ calc_quadrant_specific_sample_pct <- function(obj, fc_tbl, assay_name, slot_name
     dplyr::select(gene, quadrant, pct_samples_expressed)
 }
 
+quadrant_sample_pct_from_cache <- function(sample_means_by_quadrant, fc_tbl, threshold) {
+  validate(need(is.list(sample_means_by_quadrant), "Quadrant cache does not contain precomputed sample means."))
+
+  pct_tables <- lapply(names(sample_means_by_quadrant), function(quadrant_name) {
+    sample_means <- sample_means_by_quadrant[[quadrant_name]]
+    genes <- fc_tbl$gene[fc_tbl$quadrant %in% quadrant_name]
+    genes <- unique(as.character(genes))
+    genes_present <- intersect(genes, rownames(sample_means))
+    if (length(genes_present) == 0 || ncol(sample_means) == 0) {
+      pct_tbl <- tibble::tibble(gene = genes, pct_quadrant = 0)
+    } else {
+      pct <- rowMeans(sample_means[genes_present, , drop = FALSE] > threshold) * 100
+      pct_tbl <- tibble::tibble(gene = genes_present, pct_quadrant = as.numeric(pct))
+      pct_tbl <- tibble::tibble(gene = genes) |>
+        dplyr::left_join(pct_tbl, by = "gene") |>
+        dplyr::mutate(pct_quadrant = dplyr::coalesce(pct_quadrant, 0))
+    }
+    pct_tbl$quadrant <- quadrant_name
+    pct_tbl
+  })
+
+  dplyr::bind_rows(pct_tables) |>
+    dplyr::right_join(dplyr::select(fc_tbl, gene, quadrant), by = c("gene", "quadrant")) |>
+    dplyr::mutate(pct_samples_expressed = dplyr::coalesce(pct_quadrant, 0)) |>
+    dplyr::select(gene, quadrant, pct_samples_expressed)
+}
+
 calc_group_fc <- function(
   obj,
   genes_to_use,
@@ -2387,7 +2482,7 @@ calc_group_fc <- function(
   }
 
   md <- md[keep, , drop = FALSE]
-  expr <- get_expr_slot_safe(sub_obj, assay_name, slot_name)[, rownames(md), drop = FALSE]
+  expr <- atlas_fetch_expression(sub_obj, features = genes_to_use, cells = rownames(md))
 
   primary_cells <- md$pn_group == "Primary"
   normal_cells <- md$pn_group == "Normal"
@@ -2467,12 +2562,60 @@ build_quadrant_fc_cache <- function(
       distance = sqrt(diffuse_fc^2 + intestinal_fc^2)
     )
 
+  sample_col <- default_quadrant_sample_col(obj)
+  sample_means_by_quadrant <- if (!is.null(sample_col) && sample_col %in% colnames(meta)) {
+    expr_all <- get_expr_slot_safe(obj, assay_to_use, slot_name)
+    group_values <- as.character(meta[[group_col]])
+    cell_ids <- rownames(meta)
+    cell_sets <- list(
+      "Q1 (+/+) GC_all" = cell_ids[grepl("_Primary$", group_values)],
+      "Q2 (-/+) Intestinal" = cell_ids[grepl("^Intestinal.*_Primary$", group_values)],
+      "Q3 (-/-) Normal" = cell_ids[grepl("_Normal$", group_values)],
+      "Q4 (+/-) Diffuse" = cell_ids[grepl("^Diffuse.*_Primary$", group_values)]
+    )
+
+    lapply(cell_sets, function(keep_cells) {
+      valid_cells <- intersect(keep_cells, rownames(meta))
+      if (length(valid_cells) == 0) {
+        return(matrix(numeric(0), nrow = length(genes_to_use), ncol = 0, dimnames = list(genes_to_use, character(0))))
+      }
+      sample_ids <- as.character(meta[valid_cells, sample_col, drop = TRUE])
+      keep_sample <- !is.na(sample_ids) & nzchar(sample_ids)
+      valid_cells <- valid_cells[keep_sample]
+      sample_ids <- sample_ids[keep_sample]
+      if (length(valid_cells) == 0) {
+        return(matrix(numeric(0), nrow = length(genes_to_use), ncol = 0, dimnames = list(genes_to_use, character(0))))
+      }
+
+      expr_subset <- expr_all[genes_to_use, valid_cells, drop = FALSE]
+      sample_levels <- sort(unique(sample_ids))
+      sample_factor <- factor(sample_ids, levels = sample_levels)
+      sample_index <- as.integer(sample_factor)
+      n_cells_per_sample <- tabulate(sample_index, nbins = length(sample_levels))
+      membership <- Matrix::sparseMatrix(
+        i = seq_along(sample_index),
+        j = sample_index,
+        x = 1,
+        dims = c(length(sample_index), length(sample_levels))
+      )
+      sample_sums <- expr_subset %*% membership
+      sample_means <- sweep(as.matrix(sample_sums), 2, n_cells_per_sample, "/")
+      rownames(sample_means) <- rownames(expr_subset)
+      colnames(sample_means) <- sample_levels
+      sample_means
+    })
+  } else {
+    NULL
+  }
+
   list(
     fc_tbl = fc_tbl,
     assay_name = assay_to_use,
     slot_name = slot_name,
     celltype_col = celltype_col,
     group_col = group_col,
+    sample_col = sample_col,
+    sample_means_by_quadrant = sample_means_by_quadrant,
     pseudocount = pseudocount,
     created_at = as.character(Sys.time())
   )
@@ -2621,7 +2764,8 @@ plot_diffuse_intestinal_volcano <- function(
   df,
   max_p_adj = 0.05,
   min_abs_log2fc = 0.25,
-  top_n_labels = 15
+  top_n_labels = 15,
+  max_abs_log2fc_display = 100
 ) {
   validate(need(nrow(df) > 0, "No DEG rows are available for the selected cell type."))
   validate(need("avg_log2FC" %in% colnames(df), "The DEG table is missing avg_log2FC."))
@@ -2634,6 +2778,7 @@ plot_diffuse_intestinal_volcano <- function(
   }
 
   plot_df <- df |>
+    dplyr::filter(is.na(avg_log2FC) | abs(avg_log2FC) <= max_abs_log2fc_display) |>
     dplyr::mutate(
       p_val_adj_plot = dplyr::if_else(is.na(p_val_adj) | p_val_adj <= 0, smallest_nonzero, p_val_adj),
       neg_log10_p = -log10(p_val_adj_plot),
@@ -2643,6 +2788,8 @@ plot_diffuse_intestinal_volcano <- function(
         TRUE ~ "NS"
       )
     )
+
+  validate(need(nrow(plot_df) > 0, paste0("No volcano points remain after excluding |log2FC| > ", max_abs_log2fc_display, ".")))
 
   label_df <- plot_df |>
     dplyr::filter(significance != "NS") |>
@@ -2756,20 +2903,28 @@ build_quadrant_deg_base_from_cache <- function(
   validate(need(!is.null(sample_col) && sample_col %in% colnames(atlas_meta(obj)), "A patient/sample column is required for the quadrant scatter."))
 
   sample_expr_slot <- sample_expr_slot %||% cache$slot_name %||% "data"
-  assay_to_use <- cache$assay_name %||% atlas_default_assay(obj)
 
   plot_df <- cache$fc_tbl |>
     dplyr::filter(is.finite(diffuse_fc), is.finite(intestinal_fc))
 
-  sample_pct_tbl <- calc_quadrant_specific_sample_pct(
-    obj = obj,
-    fc_tbl = plot_df,
-    assay_name = assay_to_use,
-    slot_name = sample_expr_slot,
-    threshold = sample_expr_threshold,
-    sample_col = sample_col,
-    group_col = cache$group_col %||% "final_group"
-  )
+  sample_pct_tbl <- if (!is.null(cache$sample_means_by_quadrant)) {
+    quadrant_sample_pct_from_cache(
+      sample_means_by_quadrant = cache$sample_means_by_quadrant,
+      fc_tbl = plot_df,
+      threshold = sample_expr_threshold
+    )
+  } else {
+    assay_to_use <- cache$assay_name %||% atlas_default_assay(obj)
+    calc_quadrant_specific_sample_pct(
+      obj = obj,
+      fc_tbl = plot_df,
+      assay_name = assay_to_use,
+      slot_name = sample_expr_slot,
+      threshold = sample_expr_threshold,
+      sample_col = sample_col,
+      group_col = cache$group_col %||% "final_group"
+    )
+  }
 
   plot_df <- plot_df |>
     dplyr::left_join(sample_pct_tbl, by = c("gene", "quadrant")) |>
