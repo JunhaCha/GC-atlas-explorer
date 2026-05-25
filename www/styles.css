@@ -1,10 +1,20 @@
+:root {
+  --gcr-teal-dark: #3f7f96;
+  --gcr-teal: #5c93a8;
+  --gcr-sage: #9aa387;
+  --gcr-sage-light: #d9dece;
+  --gcr-ink: #24333b;
+  --gcr-sky: #f6fbfc;
+}
+
 body {
-  background: linear-gradient(180deg, #f6fbff 0%, #ffffff 100%);
+  background: linear-gradient(180deg, var(--gcr-sky) 0%, #ffffff 100%);
+  color: var(--gcr-ink);
 }
 
 .card {
   border-radius: 14px;
-  border: 1px solid #dbe8f0;
+  border: 1px solid #d8e5eb;
   box-shadow: 0 10px 30px rgba(40, 76, 92, 0.06);
 }
 
@@ -12,10 +22,85 @@ body {
   background: #f3f9fc;
 }
 
+.navbar {
+  background: linear-gradient(90deg, var(--gcr-teal-dark) 0%, var(--gcr-teal) 58%, #6ea4a6 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 14px 36px rgba(39, 78, 90, 0.18);
+}
+
+.navbar .navbar-brand,
+.navbar .nav-link,
+.navbar .navbar-toggler {
+  color: #f7fbfc !important;
+}
+
+.navbar .nav-link.active,
+.navbar .nav-link:hover,
+.navbar .nav-link:focus {
+  color: #ffffff !important;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.app-brand__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+}
+
+.app-brand__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-brand__subtitle {
+  font-size: 0.73rem;
+  font-weight: 500;
+  color: rgba(247, 251, 252, 0.8);
+  margin-top: 0.16rem;
+}
+
 .small-note {
   color: #4f6b78;
   font-size: 0.9rem;
   line-height: 1.4;
+}
+
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem 1.2rem;
+  margin-top: 0.5rem;
+  background: linear-gradient(180deg, rgba(243, 249, 252, 0.72) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border-top: 1px solid #d8e5eb;
+}
+
+.app-footer__left,
+.app-footer__right {
+  display: flex;
+  align-items: flex-end;
+}
+
+.app-footer__logo {
+  display: block;
+  height: auto;
+  object-fit: contain;
+}
+
+.app-footer__logo--gcr {
+  max-height: 52px;
+}
+
+.app-footer__logo--som {
+  max-height: 38px;
+  max-width: min(42vw, 360px);
 }
 
 .shiny-bound-output.recalculating,
@@ -41,4 +126,28 @@ body {
   font-weight: 600;
   box-shadow: 0 8px 20px rgba(40, 76, 92, 0.08);
   z-index: 10;
+}
+
+@media (max-width: 900px) {
+  .app-brand__subtitle {
+    display: none;
+  }
+
+  .app-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-footer__right {
+    align-self: stretch;
+    justify-content: flex-end;
+  }
+
+  .app-footer__logo--gcr {
+    max-height: 44px;
+  }
+
+  .app-footer__logo--som {
+    max-width: min(72vw, 320px);
+  }
 }
