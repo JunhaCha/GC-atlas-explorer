@@ -65,6 +65,22 @@ body {
   margin-top: 0.16rem;
 }
 
+.som-navbar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-left: 0.75rem;
+}
+
+.som-navbar-brand__logo {
+  display: block;
+  max-height: 28px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+  opacity: 0.95;
+}
+
 .small-note {
   color: #4f6b78;
   font-size: 0.9rem;
@@ -74,7 +90,7 @@ body {
 .app-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   padding: 1rem 1.5rem 1.2rem;
   margin-top: 0.5rem;
@@ -82,8 +98,7 @@ body {
   border-top: 1px solid #d8e5eb;
 }
 
-.app-footer__left,
-.app-footer__right {
+.app-footer__left {
   display: flex;
   align-items: flex-end;
 }
@@ -96,11 +111,6 @@ body {
 
 .app-footer__logo--gcr {
   max-height: 52px;
-}
-
-.app-footer__logo--som {
-  max-height: 38px;
-  max-width: min(42vw, 360px);
 }
 
 .shiny-bound-output.recalculating,
@@ -134,20 +144,14 @@ body {
   }
 
   .app-footer {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .app-footer__right {
-    align-self: stretch;
-    justify-content: flex-end;
+    padding-bottom: 1rem;
   }
 
   .app-footer__logo--gcr {
     max-height: 44px;
   }
 
-  .app-footer__logo--som {
-    max-width: min(72vw, 320px);
+  .som-navbar-brand__logo {
+    max-height: 24px;
   }
 }

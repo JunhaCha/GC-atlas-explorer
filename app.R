@@ -89,14 +89,6 @@ app_footer <- tags$footer(
       alt = "Gastric Cancer Registry",
       class = "app-footer__logo app-footer__logo--gcr"
     )
-  ),
-  div(
-    class = "app-footer__right",
-    tags$img(
-      src = "som-logo.png",
-      alt = "Stanford School of Medicine",
-      class = "app-footer__logo app-footer__logo--som"
-    )
   )
 )
 
@@ -129,6 +121,17 @@ ui <- page_navbar(
     xenium_workspace_ui(
       prefix = "xenium",
       title = "Xenium Spatial"
+    )
+  ),
+  nav_spacer(),
+  nav_item(
+    div(
+      class = "som-navbar-brand",
+      tags$img(
+        src = "som-logo.png",
+        alt = "Stanford School of Medicine",
+        class = "som-navbar-brand__logo"
+      )
     )
   )
 )
