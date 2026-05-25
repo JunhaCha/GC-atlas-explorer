@@ -33,6 +33,13 @@ body {
   padding-bottom: 0.15rem;
 }
 
+.navbar > .container-fluid {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 1rem;
+}
+
 .navbar .navbar-brand,
 .navbar .nav-link,
 .navbar .navbar-toggler {
@@ -41,16 +48,28 @@ body {
 
 .navbar .navbar-nav {
   align-items: center;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .navbar .nav-link {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 40px;
   padding-top: 0.2rem;
   padding-bottom: 0.2rem;
   font-size: 1.08rem;
   font-weight: 600;
+}
+
+.navbar .navbar-brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-right: 0.25rem;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .navbar .nav-link.active,
@@ -62,13 +81,13 @@ body {
 .app-brand {
   display: flex;
   align-items: center;
-  min-height: 100%;
+  min-height: 40px;
 }
 
 .app-brand__title {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 40px;
   font-size: 1.08rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -88,13 +107,13 @@ body {
 
 .navbar-partner-brand__logo {
   display: block;
-  max-height: 34px;
+  max-height: 42px;
   max-width: 246px;
   width: auto;
   object-fit: contain;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 2px 4px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 1px 3px;
 }
 
 .small-note {
@@ -145,14 +164,14 @@ body {
 
 @media (max-width: 900px) {
   .app-brand__title {
-    min-height: 32px;
+    min-height: 34px;
     font-size: 0.98rem;
     white-space: normal;
     line-height: 1.1;
   }
 
   .navbar .nav-link {
-    min-height: 32px;
+    min-height: 34px;
     font-size: 0.98rem;
   }
 
@@ -163,7 +182,7 @@ body {
   }
 
   .navbar-partner-brand__logo {
-    max-height: 24px;
+    max-height: 26px;
     max-width: 144px;
   }
 
