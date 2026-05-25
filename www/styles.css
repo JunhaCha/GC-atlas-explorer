@@ -59,8 +59,9 @@ body {
   min-height: 40px;
   padding-top: 0.2rem;
   padding-bottom: 0.2rem;
-  font-size: 1.08rem;
-  font-weight: 600;
+  font-size: 1.03rem;
+  font-weight: 500;
+  color: rgba(247, 251, 252, 0.82) !important;
 }
 
 .navbar .navbar-brand {
@@ -88,12 +89,14 @@ body {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
-  font-size: 1.22rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 1.26rem;
+  font-weight: 900;
+  letter-spacing: -0.035em;
   white-space: nowrap;
   color: #ffffff;
-  text-shadow: 0 1px 10px rgba(24, 52, 60, 0.18);
+  text-shadow:
+    0 2px 0 rgba(31, 69, 82, 0.34),
+    0 0 14px rgba(18, 43, 51, 0.24);
 }
 
 .navbar-partner-brand {
@@ -174,7 +177,7 @@ body {
 
   .navbar .nav-link {
     min-height: 34px;
-    font-size: 0.98rem;
+    font-size: 0.95rem;
   }
 
   .navbar-partner-brand {
