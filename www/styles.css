@@ -71,13 +71,17 @@ body {
   margin-right: 1.75rem;
   padding-top: 0;
   padding-bottom: 0;
-  margin-left: -0.15rem;
+  margin-left: -0.75rem;
 }
 
 .navbar .nav-link.active,
 .navbar .nav-link:hover,
 .navbar .nav-link:focus {
   color: #ffffff !important;
+}
+
+.navbar .nav-link.active {
+  box-shadow: inset 0 -3px 0 #111111;
 }
 
 .app-brand {
