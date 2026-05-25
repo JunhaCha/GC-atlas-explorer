@@ -69,16 +69,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-left: 0.75rem;
+  padding-left: 0.5rem;
+  max-width: 180px;
+  overflow: hidden;
 }
 
 .som-navbar-brand__logo {
   display: block;
-  max-height: 28px;
+  max-height: 16px;
+  max-width: 160px;
   width: auto;
   object-fit: contain;
   filter: brightness(0) invert(1);
-  opacity: 0.95;
+  opacity: 0.92;
 }
 
 .small-note {
@@ -152,6 +155,7 @@ body {
   }
 
   .som-navbar-brand__logo {
-    max-height: 24px;
+    max-height: 14px;
+    max-width: 120px;
   }
 }
