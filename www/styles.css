@@ -151,6 +151,10 @@ body {
   object-fit: contain;
 }
 
+.tab-content {
+  padding-top: 0.45rem;
+}
+
 .shiny-bound-output.recalculating,
 .html-widget-output.recalculating,
 .datatables.recalculating {
