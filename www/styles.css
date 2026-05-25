@@ -24,6 +24,11 @@ body {
   flex-direction: column;
 }
 
+.sidebar hr {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 .navbar {
   background: linear-gradient(90deg, var(--gcr-teal-dark) 0%, var(--gcr-teal) 58%, #6ea4a6 100%) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
