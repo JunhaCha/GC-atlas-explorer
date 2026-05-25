@@ -28,12 +28,29 @@ body {
   background: linear-gradient(90deg, var(--gcr-teal-dark) 0%, var(--gcr-teal) 58%, #6ea4a6 100%) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 14px 36px rgba(39, 78, 90, 0.18);
+  min-height: 48px;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
 }
 
 .navbar .navbar-brand,
 .navbar .nav-link,
 .navbar .navbar-toggler {
   color: #f7fbfc !important;
+}
+
+.navbar .navbar-nav {
+  align-items: center;
+}
+
+.navbar .nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding-top: 0.2rem;
+  padding-bottom: 0.2rem;
+  font-size: 1.08rem;
+  font-weight: 600;
 }
 
 .navbar .nav-link.active,
@@ -51,8 +68,8 @@ body {
 .app-brand__title {
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  font-size: 1.18rem;
+  min-height: 36px;
+  font-size: 1.08rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -63,16 +80,16 @@ body {
   align-items: center;
   justify-content: flex-end;
   padding-left: 0.5rem;
-  max-width: 240px;
-  width: 240px;
+  max-width: 260px;
+  width: 260px;
   overflow: hidden;
-  flex: 0 0 240px;
+  flex: 0 0 260px;
 }
 
 .navbar-partner-brand__logo {
   display: block;
-  max-height: 30px;
-  max-width: 228px;
+  max-height: 34px;
+  max-width: 246px;
   width: auto;
   object-fit: contain;
   border-radius: 4px;
@@ -128,10 +145,15 @@ body {
 
 @media (max-width: 900px) {
   .app-brand__title {
-    min-height: 36px;
-    font-size: 1.02rem;
+    min-height: 32px;
+    font-size: 0.98rem;
     white-space: normal;
     line-height: 1.1;
+  }
+
+  .navbar .nav-link {
+    min-height: 32px;
+    font-size: 0.98rem;
   }
 
   .navbar-partner-brand {
@@ -141,8 +163,8 @@ body {
   }
 
   .navbar-partner-brand__logo {
-    max-height: 22px;
-    max-width: 142px;
+    max-height: 24px;
+    max-width: 144px;
   }
 
   .app-sidebar-logo {
