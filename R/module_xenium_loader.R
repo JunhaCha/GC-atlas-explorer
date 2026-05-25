@@ -20,6 +20,14 @@ xenium_loader_ui <- function(id, title = "Xenium Spatial Data") {
     tags$div(
       class = "small-note",
       "Loads only the selected sample image, cell centroids, and precomputed neighborhood summaries."
+    ),
+    tags$div(
+      class = "app-sidebar-logo-wrap",
+      tags$img(
+        src = "gcr-logo.jpeg",
+        alt = "Gastric Cancer Registry",
+        class = "app-sidebar-logo"
+      )
     )
   )
 }

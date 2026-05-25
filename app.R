@@ -73,23 +73,7 @@ xenium_workspace_ui <- function(prefix, title) {
 
 app_brand_title <- div(
   class = "app-brand",
-  div(
-    class = "app-brand__text",
-    span(class = "app-brand__title", "Gastric Cancer single-cell Explorer"),
-    span(class = "app-brand__subtitle", "Stanford single-cell atlas and spatial browser")
-  )
-)
-
-app_footer <- tags$footer(
-  class = "app-footer",
-  div(
-    class = "app-footer__left",
-    tags$img(
-      src = "gcr-logo.jpeg",
-      alt = "Gastric Cancer Registry",
-      class = "app-footer__logo app-footer__logo--gcr"
-    )
-  )
+  span(class = "app-brand__title", "Gastric Cancer single-cell Explorer")
 )
 
 ui <- page_navbar(
@@ -107,7 +91,6 @@ ui <- page_navbar(
   header = tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
   ),
-  footer = app_footer,
   nav_panel(
     "scRNA-seq Atlas",
     atlas_workspace_ui(
@@ -126,11 +109,11 @@ ui <- page_navbar(
   nav_spacer(),
   nav_item(
     div(
-      class = "som-navbar-brand",
+      class = "navbar-partner-brand",
       tags$img(
-        src = "som-logo.png",
-        alt = "Stanford School of Medicine",
-        class = "som-navbar-brand__logo"
+        src = "stanford-jrg-logo.jpeg",
+        alt = "Stanford Medicine Ji Research Group",
+        class = "navbar-partner-brand__logo"
       )
     )
   )

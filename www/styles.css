@@ -20,6 +20,8 @@ body {
 
 .sidebar {
   background: #f3f9fc;
+  display: flex;
+  flex-direction: column;
 }
 
 .navbar {
@@ -43,47 +45,39 @@ body {
 .app-brand {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-}
-
-.app-brand__text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.05;
+  min-height: 100%;
 }
 
 .app-brand__title {
-  font-size: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
-.app-brand__subtitle {
-  font-size: 0.73rem;
-  font-weight: 500;
-  color: rgba(247, 251, 252, 0.8);
-  margin-top: 0.16rem;
-}
-
-.som-navbar-brand {
+.navbar-partner-brand {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding-left: 0.25rem;
-  max-width: 72px;
-  width: 72px;
+  padding-left: 0.5rem;
+  max-width: 240px;
+  width: 240px;
   overflow: hidden;
-  flex: 0 0 72px;
+  flex: 0 0 240px;
 }
 
-.som-navbar-brand__logo {
+.navbar-partner-brand__logo {
   display: block;
-  max-height: 7px;
-  max-width: 68px;
+  max-height: 30px;
+  max-width: 228px;
   width: auto;
   object-fit: contain;
-  filter: brightness(0) invert(1);
-  opacity: 0.9;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 2px 4px;
 }
 
 .small-note {
@@ -92,30 +86,19 @@ body {
   line-height: 1.4;
 }
 
-.app-footer {
+.app-sidebar-logo-wrap {
+  margin-top: auto;
+  padding-top: 1.25rem;
   display: flex;
-  align-items: center;
   justify-content: flex-start;
-  gap: 1rem;
-  padding: 1rem 1.5rem 1.2rem;
-  margin-top: 0.5rem;
-  background: linear-gradient(180deg, rgba(243, 249, 252, 0.72) 0%, rgba(255, 255, 255, 0.96) 100%);
-  border-top: 1px solid #d8e5eb;
 }
 
-.app-footer__left {
-  display: flex;
-  align-items: flex-end;
-}
-
-.app-footer__logo {
+.app-sidebar-logo {
   display: block;
+  width: min(100%, 220px);
+  max-height: 120px;
   height: auto;
   object-fit: contain;
-}
-
-.app-footer__logo--gcr {
-  max-height: 52px;
 }
 
 .shiny-bound-output.recalculating,
@@ -144,20 +127,26 @@ body {
 }
 
 @media (max-width: 900px) {
-  .app-brand__subtitle {
-    display: none;
+  .app-brand__title {
+    min-height: 36px;
+    font-size: 1.02rem;
+    white-space: normal;
+    line-height: 1.1;
   }
 
-  .app-footer {
-    padding-bottom: 1rem;
+  .navbar-partner-brand {
+    max-width: 150px;
+    width: 150px;
+    flex-basis: 150px;
   }
 
-  .app-footer__logo--gcr {
-    max-height: 44px;
+  .navbar-partner-brand__logo {
+    max-height: 22px;
+    max-width: 142px;
   }
 
-  .som-navbar-brand__logo {
-    max-height: 6px;
-    max-width: 56px;
+  .app-sidebar-logo {
+    width: min(100%, 180px);
+    max-height: 96px;
   }
 }

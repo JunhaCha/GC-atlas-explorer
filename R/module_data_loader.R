@@ -38,7 +38,15 @@ data_loader_ui <- function(
     textOutput(ns("status")),
     if (!is.null(note) && nzchar(note)) {
       tags$div(class = "small-note", note)
-    }
+    },
+    tags$div(
+      class = "app-sidebar-logo-wrap",
+      tags$img(
+        src = "gcr-logo.jpeg",
+        alt = "Gastric Cancer Registry",
+        class = "app-sidebar-logo"
+      )
+    )
   )
 }
 
