@@ -33,9 +33,9 @@ body {
   background: linear-gradient(90deg, var(--gcr-teal-dark) 0%, var(--gcr-teal) 58%, #6ea4a6 100%) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 14px 36px rgba(39, 78, 90, 0.18);
-  min-height: 48px;
-  padding-top: 0.15rem;
-  padding-bottom: 0.15rem;
+  min-height: 62px;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .navbar > .container-fluid {
@@ -72,7 +72,7 @@ body {
 .navbar .navbar-brand {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 52px;
   margin-right: 1.75rem;
   padding-top: 0;
   padding-bottom: 0;
@@ -92,14 +92,14 @@ body {
 .app-brand {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 52px;
 }
 
 .app-brand__title {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  font-size: 1.26rem;
+  min-height: 52px;
+  font-size: 1.4rem;
   font-weight: 900;
   letter-spacing: -0.035em;
   white-space: nowrap;
@@ -125,8 +125,8 @@ body {
 
 .navbar-partner-brand__logo {
   display: block;
-  max-height: 42px;
-  max-width: 246px;
+  max-height: 54px;
+  max-width: 315px;
   width: auto;
   object-fit: contain;
   border-radius: 4px;
@@ -182,8 +182,8 @@ body {
 
 @media (max-width: 900px) {
   .app-brand__title {
-    min-height: 34px;
-    font-size: 1.05rem;
+    min-height: 42px;
+    font-size: 1.12rem;
     white-space: normal;
     line-height: 1.1;
   }
@@ -200,7 +200,7 @@ body {
   }
 
   .navbar-partner-brand__logo {
-    max-height: 26px;
+    max-height: 36px;
     max-width: 144px;
   }
 
