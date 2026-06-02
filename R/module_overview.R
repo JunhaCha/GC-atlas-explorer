@@ -14,7 +14,7 @@ overview_ui <- function(id) {
         width = 7,
         card(
           card_header("Metadata Preview"),
-          DT::DTOutput(ns("metadata_table"))
+          dataTableOutput(ns("metadata_table"))
         )
       )
     )
@@ -28,7 +28,7 @@ overview_server <- function(id, loaded) {
       object_summary(loaded()$obj, loaded()$path, loaded()$group_var)
     }, rownames = FALSE, colnames = FALSE)
 
-    output$metadata_table <- DT::renderDT({
+    output$metadata_table <- renderDataTable({
       req(loaded()$obj)
       metadata_preview(loaded()$obj)
     },
