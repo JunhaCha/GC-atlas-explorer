@@ -11,7 +11,7 @@ gene_explorer_ui <- function(id) {
           choices = NULL,
           multiple = TRUE,
           options = list(
-            placeholder = "Search genes",
+            placeholder = "Select up to 4 genes",
             maxOptions = 100000,
             maxItems = 4
           )
