@@ -30,15 +30,7 @@ gene_explorer_ui <- function(id) {
         width = 9,
         card(
           card_header("Feature Plot"),
-          plotOutput(
-            ns("feature_plot"),
-            height = 320,
-            brush = brushOpts(ns("feature_brush"), direction = "xy", resetOnNew = TRUE)
-          ),
-          div(
-            class = "mt-2",
-            actionButton(ns("reset_feature_zoom"), "Reset zoom", class = "btn-outline-secondary btn-sm")
-          )
+          plotOutput(ns("feature_plot"), height = 320)
         ),
         br(),
         card(
@@ -105,12 +97,8 @@ materialize_violin_grouping <- function(obj, group_var, split_var) {
 
 gene_explorer_server <- function(id, loaded) {
   moduleServer(id, function(input, output, session) {
-    feature_zoom <- reactiveValues(x = NULL, y = NULL)
-
     observeEvent(loaded()$obj, {
       req(loaded()$obj)
-      feature_zoom$x <- NULL
-      feature_zoom$y <- NULL
       violin_choices <- filtered_violin_choices(loaded()$obj)
       feature_choices <- available_features(loaded()$obj, loaded()$source_path)
 
@@ -169,26 +157,6 @@ gene_explorer_server <- function(id, loaded) {
       }
     })
 
-    observeEvent(input$genes, {
-      feature_zoom$x <- NULL
-      feature_zoom$y <- NULL
-    }, ignoreInit = TRUE)
-
-    observeEvent(input$feature_brush, {
-      brush <- input$feature_brush
-      req(brush)
-      if (is.null(brush$xmin) || is.null(brush$xmax) || is.null(brush$ymin) || is.null(brush$ymax)) {
-        return(invisible(NULL))
-      }
-      feature_zoom$x <- c(brush$xmin, brush$xmax)
-      feature_zoom$y <- c(brush$ymin, brush$ymax)
-    })
-
-    observeEvent(input$reset_feature_zoom, {
-      feature_zoom$x <- NULL
-      feature_zoom$y <- NULL
-    }, ignoreInit = TRUE)
-
     output$feature_plot <- renderPlot({
       req(loaded()$obj, input$genes)
       validate(need(length(input$genes) > 0, "Choose at least one gene."))
@@ -196,9 +164,7 @@ gene_explorer_server <- function(id, loaded) {
 
       plot_feature_expression(
         obj = loaded()$obj,
-        features = input$genes[seq_len(min(4, length(input$genes)))],
-        xlim = feature_zoom$x,
-        ylim = feature_zoom$y
+        features = input$genes[seq_len(min(4, length(input$genes)))]
       )
     })
 

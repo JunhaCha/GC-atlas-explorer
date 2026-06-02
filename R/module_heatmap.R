@@ -5,16 +5,7 @@ heatmap_ui <- function(id) {
     fluidRow(
       column(
         width = 3,
-        selectizeInput(
-          ns("genes"),
-          "Genes for average expression heatmap",
-          choices = NULL,
-          multiple = TRUE,
-          options = list(
-            placeholder = "Select genes",
-            maxOptions = 100000
-          )
-        ),
+        uiOutput(ns("genes_ui")),
         selectInput(ns("display_by"), "Display columns by", choices = character(0)),
         uiOutput(ns("filter_controls")),
         tags$div(
@@ -50,6 +41,26 @@ heatmap_server <- function(id, loaded) {
       read_average_heatmap_cache(loaded()$source_path)
     })
 
+    output$genes_ui <- renderUI({
+      req(loaded()$obj)
+      available_gene_choices <- if (!is.null(cache_data())) sort(rownames(cache_data()$avg_mat)) else available_features(loaded()$obj, loaded()$source_path)
+      current_genes <- isolate(input$genes %||% character(0))
+      current_genes <- intersect(current_genes, available_gene_choices)
+      selected_genes <- if (length(current_genes) > 0) current_genes else default_heatmap_genes(available_gene_choices)
+
+      selectizeInput(
+        ns("genes"),
+        "Genes for average expression heatmap",
+        choices = available_gene_choices,
+        selected = selected_genes,
+        multiple = TRUE,
+        options = list(
+          placeholder = "Select genes",
+          maxOptions = 100000
+        )
+      )
+    })
+
     filter_values <- reactive({
       cache <- cache_data()
       if (is.null(cache)) {
@@ -79,14 +90,6 @@ heatmap_server <- function(id, loaded) {
     observeEvent(loaded()$obj, {
       req(loaded()$obj)
 
-      available_gene_choices <- if (!is.null(cache_data())) sort(rownames(cache_data()$avg_mat)) else available_features(loaded()$obj, loaded()$source_path)
-      updateSelectizeInput(
-        session,
-        "genes",
-        choices = available_gene_choices,
-        selected = default_heatmap_genes(available_gene_choices),
-        server = TRUE
-      )
       if (!is.null(cache_data())) {
         updateSelectInput(
           session,
@@ -134,6 +137,23 @@ heatmap_server <- function(id, loaded) {
     output$avg_table <- renderDataTable({
       req(avg_data())
       avg_data()$long
-    }, options = list(pageLength = 12, scrollX = TRUE))
+    }, options = list(
+      pageLength = 12,
+      scrollX = TRUE,
+      pagingType = "simple",
+      language = list(paginate = list(previous = "Previous", "next" = "Next")),
+      callback = DT::JS(
+        "table.on('draw.dt', function(){",
+        "  var api = table.api();",
+        "  var info = api.page.info();",
+        "  var wrap = $(table.table().container()).find('.dataTables_paginate');",
+        "  wrap.find('.dt-page-current').remove();",
+        "  if (info && info.pages > 0) {",
+        "    $('<span class=\"dt-page-current\">... ' + (info.page + 1) + ' ...</span>').insertAfter(wrap.find('.paginate_button.previous'));",
+        "  }",
+        "});",
+        "table.trigger('draw.dt');"
+      )
+    ))
   })
 }
