@@ -58,11 +58,11 @@ xenium_neighborhoods_server <- function(id, loaded) {
     output$summary_table <- renderDataTable({
       bundle()$neighborhood_summary |>
         dplyr::mutate(fraction = sprintf("%.1f%%", fraction * 100))
-    }, options = list(scrollX = TRUE, pageLength = 10))
+    }, options = datatable_simple_pager_options(page_length = 10))
 
     output$composition_table <- renderDataTable({
       bundle()$neighborhood_composition |>
         dplyr::mutate(fraction = sprintf("%.1f%%", fraction * 100))
-    }, options = list(scrollX = TRUE, pageLength = 12))
+    }, options = datatable_simple_pager_options(page_length = 12))
   })
 }

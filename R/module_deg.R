@@ -336,7 +336,7 @@ deg_server <- function(id, loaded) {
       df <- filtered_deg()
       validate(need(nrow(df) > 0, "No DEG rows remain after applying the selected filters."))
       format_deg_table_for_display(df)
-    }, options = list(pageLength = 25, scrollX = TRUE))
+    }, options = datatable_simple_pager_options(page_length = 25))
 
     output$secondary_card <- renderUI({
       ns <- session$ns
@@ -415,7 +415,7 @@ deg_server <- function(id, loaded) {
       req(quadrant_results())
       quadrant_results()$plot_df |>
         dplyr::arrange(dplyr::desc(distance))
-    }, options = list(pageLength = 20, scrollX = TRUE))
+    }, options = datatable_simple_pager_options(page_length = 20))
 
     volcano_cluster_table <- reactive({
       validate(need(identical(deg_mode(), "diffuse_intestinal"), ""))

@@ -137,23 +137,6 @@ heatmap_server <- function(id, loaded) {
     output$avg_table <- renderDataTable({
       req(avg_data())
       avg_data()$long
-    }, options = list(
-      pageLength = 12,
-      scrollX = TRUE,
-      pagingType = "simple",
-      language = list(paginate = list(previous = "Previous", "next" = "Next")),
-      callback = DT::JS(
-        "table.on('draw.dt', function(){",
-        "  var api = table.api();",
-        "  var info = api.page.info();",
-        "  var wrap = $(table.table().container()).find('.dataTables_paginate');",
-        "  wrap.find('.dt-page-current').remove();",
-        "  if (info && info.pages > 0) {",
-        "    $('<span class=\"dt-page-current\">... ' + (info.page + 1) + ' ...</span>').insertAfter(wrap.find('.paginate_button.previous'));",
-        "  }",
-        "});",
-        "table.trigger('draw.dt');"
-      )
-    ))
+    }, options = datatable_simple_pager_options(page_length = 12))
   })
 }

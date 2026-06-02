@@ -396,6 +396,43 @@ color_rds_paths <- c(
   }
 }
 
+datatable_simple_pager_callback <- function() {
+  DT::JS(
+    "function(settings) {",
+    "  var api = this.api();",
+    "  var container = $(api.table().container());",
+    "  function updatePager() {",
+    "    var info = api.page.info();",
+    "    var wrap = container.find('.dataTables_paginate');",
+    "    wrap.find('.dt-page-current').remove();",
+    "    if (info && info.pages > 0) {",
+    "      $('<span class=\"dt-page-current\">... ' + (info.page + 1) + ' ...</span>').insertAfter(wrap.find('.paginate_button.previous'));",
+    "    }",
+    "  }",
+    "  api.on('draw.dt', updatePager);",
+    "  updatePager();",
+    "}"
+  )
+}
+
+datatable_simple_pager_options <- function(page_length = 10, scroll_x = TRUE, extra = list()) {
+  modifyList(
+    list(
+      scrollX = scroll_x,
+      pageLength = page_length,
+      pagingType = "simple",
+      language = list(
+        paginate = list(
+          previous = "Previous",
+          "next" = "Next"
+        )
+      ),
+      callback = datatable_simple_pager_callback()
+    ),
+    extra
+  )
+}
+
 safe_seurat_read <- function(path) {
   path <- normalizePath(path, winslash = "/", mustWork = FALSE)
   bundle_path <- matching_atlas_bundle_path(path)

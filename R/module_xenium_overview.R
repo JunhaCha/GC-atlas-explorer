@@ -57,11 +57,11 @@ xenium_overview_server <- function(id, loaded) {
 
     output$celltype_table <- renderDataTable({
       xenium_count_table(bundle()$cells, "celltype")
-    }, options = list(scrollX = TRUE, pageLength = 10))
+    }, options = datatable_simple_pager_options(page_length = 10))
 
     output$neighborhood_table <- renderDataTable({
       xenium_count_table(bundle()$cells, "neighborhood")
-    }, options = list(scrollX = TRUE, pageLength = 10))
+    }, options = datatable_simple_pager_options(page_length = 10))
 
     output$celltype_plot <- renderPlot({
       xenium_overview_barplot(bundle()$cells, "celltype", "Cells by cell type")

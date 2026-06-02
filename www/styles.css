@@ -172,6 +172,38 @@ body {
   right: 0.2rem !important;
 }
 
+.dataTables_wrapper .dataTables_info {
+  float: none !important;
+  display: block;
+  padding-top: 0.85rem !important;
+  margin-bottom: 0.2rem;
+  color: var(--gcr-ink);
+}
+
+.dataTables_wrapper .dataTables_paginate {
+  float: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding-top: 0 !important;
+  margin-top: 0.2rem;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  margin-left: 0 !important;
+  padding: 0 !important;
+  min-width: auto !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .dt-page-current {
+  display: inline-block;
+  padding: 0 0.2rem;
+  color: var(--gcr-ink);
+  font-weight: 600;
+}
+
 .shiny-bound-output.recalculating,
 .html-widget-output.recalculating,
 .datatables.recalculating {
