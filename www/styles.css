@@ -155,6 +155,23 @@ body {
   padding-top: 0.45rem;
 }
 
+.dataTables_wrapper table.dataTable thead th,
+.dataTables_wrapper table.dataTable thead td {
+  border-top: 1px solid #111111 !important;
+  border-bottom: 1px solid #111111 !important;
+}
+
+.dataTables_wrapper table.dataTable thead th {
+  padding-right: 1rem !important;
+}
+
+.dataTables_wrapper table.dataTable thead th .dt-column-order,
+.dataTables_wrapper table.dataTable thead th .dt-orderable-asc,
+.dataTables_wrapper table.dataTable thead th .dt-orderable-desc {
+  margin-left: 0.2rem !important;
+  right: 0.2rem !important;
+}
+
 .shiny-bound-output.recalculating,
 .html-widget-output.recalculating,
 .datatables.recalculating {

@@ -890,8 +890,24 @@ plot_average_heatmap <- function(avg_df) {
     )
 }
 
-metadata_preview <- function(obj, n = 10) {
-  head(atlas_meta(obj), n = n)
+metadata_preview_labels <- c(
+  rev_condition = "condition",
+  rev_pathological_subtype = "pathological subtype",
+  rev_molecular_subtype = "molecular subtype",
+  rev_stage = "stage"
+)
+
+metadata_preview <- function(obj, n = NULL) {
+  meta <- as.data.frame(atlas_meta(obj), stringsAsFactors = FALSE)
+  if (!is.null(n) && is.finite(n)) {
+    meta <- head(meta, n = n)
+  }
+
+  renamed <- colnames(meta)
+  named_hits <- renamed %in% names(metadata_preview_labels)
+  renamed[named_hits] <- unname(metadata_preview_labels[renamed[named_hits]])
+  colnames(meta) <- renamed
+  meta
 }
 
 umap_field_labels <- c(

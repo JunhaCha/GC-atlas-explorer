@@ -30,7 +30,14 @@ overview_server <- function(id, loaded) {
 
     output$metadata_table <- renderDataTable({
       req(loaded()$obj)
-      metadata_preview(loaded()$obj, n = 15)
-    }, options = list(scrollX = TRUE, pageLength = 15))
+      metadata_preview(loaded()$obj)
+    }, options = list(
+      scrollX = TRUE,
+      paging = FALSE,
+      searching = FALSE,
+      info = FALSE,
+      dom = "t",
+      orderClasses = TRUE
+    ))
   })
 }
