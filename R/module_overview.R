@@ -14,7 +14,10 @@ overview_ui <- function(id) {
         width = 7,
         card(
           card_header("Metadata Preview"),
-          DT::DTOutput(ns("metadata_table"))
+          div(
+            style = "min-height: 12.5rem;",
+            DT::DTOutput(ns("metadata_table"))
+          )
         )
       )
     )
