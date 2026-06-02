@@ -891,7 +891,7 @@ object_summary <- function(obj, path = NULL, group_var = NULL) {
       format(length(atlas_features(obj)), big.mark = ","),
       paste(available_assays(obj), collapse = ", "),
       paste(available_reductions(obj), collapse = ", "),
-      paste(colnames(meta), collapse = ", "),
+      paste(rename_metadata_columns_for_display(colnames(meta)), collapse = ", "),
       active_levels
     )
   )
@@ -934,16 +934,20 @@ metadata_preview_labels <- c(
   rev_stage = "stage"
 )
 
+rename_metadata_columns_for_display <- function(cols) {
+  renamed <- as.character(cols)
+  named_hits <- renamed %in% names(metadata_preview_labels)
+  renamed[named_hits] <- unname(metadata_preview_labels[renamed[named_hits]])
+  renamed
+}
+
 metadata_preview <- function(obj, n = NULL) {
   meta <- as.data.frame(atlas_meta(obj), stringsAsFactors = FALSE)
   if (!is.null(n) && is.finite(n)) {
     meta <- head(meta, n = n)
   }
 
-  renamed <- colnames(meta)
-  named_hits <- renamed %in% names(metadata_preview_labels)
-  renamed[named_hits] <- unname(metadata_preview_labels[renamed[named_hits]])
-  colnames(meta) <- renamed
+  colnames(meta) <- rename_metadata_columns_for_display(colnames(meta))
   meta
 }
 
