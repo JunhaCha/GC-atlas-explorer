@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN install2.r --error --skipinstalled \
     arrow \
     shiny \
+    DT \
     bslib \
     dplyr \
     ggplot2 \
