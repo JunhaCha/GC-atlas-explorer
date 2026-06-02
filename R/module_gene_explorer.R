@@ -20,7 +20,7 @@ gene_explorer_ui <- function(id) {
         ),
         actionButton(
           ns("plot_genes"),
-          "Plot selected genes",
+          "Plot selected gene(s)",
           class = "btn-primary w-100"
         ),
         br(),
@@ -178,7 +178,7 @@ gene_explorer_server <- function(id, loaded) {
     output$feature_plot <- renderPlot({
       req(loaded()$obj)
       genes_to_plot <- plotted_genes()
-      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected genes'."))
+      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected gene(s)'."))
       validate(need(length(genes_to_plot) > 0, "Choose at least one gene."))
       validate(need(length(genes_to_plot) <= 4, "Choose up to 4 genes."))
 
@@ -191,7 +191,7 @@ gene_explorer_server <- function(id, loaded) {
     output$violin_plot <- renderPlot({
       req(loaded()$obj, input$group_by)
       genes_to_plot <- plotted_genes()
-      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected genes'."))
+      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected gene(s)'."))
       validate(need(length(genes_to_plot) <= 4, "Choose up to 4 genes."))
       split_var <- if (nzchar(input$split_by %||% "")) input$split_by else NULL
       obj_to_plot <- loaded()$obj
