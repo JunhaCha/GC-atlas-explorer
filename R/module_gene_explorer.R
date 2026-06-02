@@ -16,6 +16,12 @@ gene_explorer_ui <- function(id) {
             maxItems = 4
           )
         ),
+        actionButton(
+          ns("plot_genes"),
+          "Plot selected genes",
+          class = "btn-primary w-100"
+        ),
+        br(),
         selectInput(ns("group_by"), "Violin x-axis grouping", choices = character(0)),
         selectInput(ns("split_by"), "Split violin within group", choices = character(0)),
         selectizeInput(
@@ -102,8 +108,11 @@ gene_explorer_server <- function(id, loaded) {
       genes[seq_len(min(4, length(genes)))]
     }) |> shiny::debounce(250)
 
+    plotted_genes <- reactiveVal(NULL)
+
     observeEvent(loaded()$obj, {
       req(loaded()$obj)
+      plotted_genes(NULL)
       violin_choices <- filtered_violin_choices(loaded()$obj)
       feature_choices <- available_features(loaded()$obj, loaded()$source_path)
 
@@ -162,20 +171,28 @@ gene_explorer_server <- function(id, loaded) {
       }
     })
 
+    observeEvent(input$plot_genes, {
+      plotted_genes(selected_genes())
+    })
+
     output$feature_plot <- renderPlot({
-      req(loaded()$obj, selected_genes())
-      validate(need(length(selected_genes()) > 0, "Choose at least one gene."))
-      validate(need(length(selected_genes()) <= 4, "Choose up to 4 genes."))
+      req(loaded()$obj)
+      genes_to_plot <- plotted_genes()
+      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected genes'."))
+      validate(need(length(genes_to_plot) > 0, "Choose at least one gene."))
+      validate(need(length(genes_to_plot) <= 4, "Choose up to 4 genes."))
 
       plot_feature_expression(
         obj = loaded()$obj,
-        features = selected_genes()
+        features = genes_to_plot
       )
     })
 
     output$violin_plot <- renderPlot({
-      req(loaded()$obj, selected_genes(), input$group_by)
-      validate(need(length(selected_genes()) <= 4, "Choose up to 4 genes."))
+      req(loaded()$obj, input$group_by)
+      genes_to_plot <- plotted_genes()
+      validate(need(!is.null(genes_to_plot), "Choose up to 4 genes and click 'Plot selected genes'."))
+      validate(need(length(genes_to_plot) <= 4, "Choose up to 4 genes."))
       split_var <- if (nzchar(input$split_by %||% "")) input$split_by else NULL
       obj_to_plot <- loaded()$obj
       selected_celltypes <- input$violin_celltypes %||% character(0)
@@ -193,7 +210,7 @@ gene_explorer_server <- function(id, loaded) {
 
       plot_violin_expression(
         obj = obj_to_plot,
-        features = selected_genes(),
+        features = genes_to_plot,
         group_var = input$group_by,
         split_var = split_var
       )
