@@ -12,7 +12,9 @@ gene_explorer_ui <- function(id) {
           multiple = TRUE,
           options = list(
             placeholder = "Select up to 4 genes",
-            maxOptions = 100000,
+            maxOptions = 200,
+            loadThrottle = 150,
+            minLength = 2,
             maxItems = 4
           )
         ),
@@ -120,9 +122,7 @@ gene_explorer_server <- function(id, loaded) {
         session,
         "genes",
         choices = feature_choices,
-        selected = {
-          if ("A1BG" %in% feature_choices) "A1BG" else head(feature_choices, 1)
-        },
+        selected = character(0),
         server = TRUE
       )
       updateSelectInput(
