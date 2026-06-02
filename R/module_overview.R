@@ -14,7 +14,7 @@ overview_ui <- function(id) {
         width = 7,
         card(
           card_header("Metadata Preview"),
-          dataTableOutput(ns("metadata_table"))
+          DT::DTOutput(ns("metadata_table"))
         )
       )
     )
@@ -28,16 +28,17 @@ overview_server <- function(id, loaded) {
       object_summary(loaded()$obj, loaded()$path, loaded()$group_var)
     }, rownames = FALSE, colnames = FALSE)
 
-    output$metadata_table <- renderDataTable({
+    output$metadata_table <- DT::renderDT({
       req(loaded()$obj)
       metadata_preview(loaded()$obj)
-    }, options = list(
-      scrollX = TRUE,
-      paging = FALSE,
-      searching = FALSE,
-      info = FALSE,
-      dom = "t",
-      orderClasses = TRUE
+    },
+    server = TRUE,
+    options = datatable_simple_pager_options(
+      page_length = 12,
+      extra = list(
+        searching = FALSE,
+        orderClasses = TRUE
+      )
     ))
   })
 }
