@@ -97,6 +97,11 @@ materialize_violin_grouping <- function(obj, group_var, split_var) {
 
 gene_explorer_server <- function(id, loaded) {
   moduleServer(id, function(input, output, session) {
+    selected_genes <- reactive({
+      genes <- unique(as.character(input$genes %||% character(0)))
+      genes[seq_len(min(4, length(genes)))]
+    }) |> shiny::debounce(250)
+
     observeEvent(loaded()$obj, {
       req(loaded()$obj)
       violin_choices <- filtered_violin_choices(loaded()$obj)
@@ -158,19 +163,19 @@ gene_explorer_server <- function(id, loaded) {
     })
 
     output$feature_plot <- renderPlot({
-      req(loaded()$obj, input$genes)
-      validate(need(length(input$genes) > 0, "Choose at least one gene."))
-      validate(need(length(input$genes) <= 4, "Choose up to 4 genes."))
+      req(loaded()$obj, selected_genes())
+      validate(need(length(selected_genes()) > 0, "Choose at least one gene."))
+      validate(need(length(selected_genes()) <= 4, "Choose up to 4 genes."))
 
       plot_feature_expression(
         obj = loaded()$obj,
-        features = input$genes[seq_len(min(4, length(input$genes)))]
+        features = selected_genes()
       )
     })
 
     output$violin_plot <- renderPlot({
-      req(loaded()$obj, input$genes, input$group_by)
-      validate(need(length(input$genes) <= 4, "Choose up to 4 genes."))
+      req(loaded()$obj, selected_genes(), input$group_by)
+      validate(need(length(selected_genes()) <= 4, "Choose up to 4 genes."))
       split_var <- if (nzchar(input$split_by %||% "")) input$split_by else NULL
       obj_to_plot <- loaded()$obj
       selected_celltypes <- input$violin_celltypes %||% character(0)
@@ -188,7 +193,7 @@ gene_explorer_server <- function(id, loaded) {
 
       plot_violin_expression(
         obj = obj_to_plot,
-        features = input$genes[seq_len(min(4, length(input$genes)))],
+        features = selected_genes(),
         group_var = input$group_by,
         split_var = split_var
       )

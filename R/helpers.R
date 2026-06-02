@@ -459,6 +459,7 @@ safe_seurat_read <- function(path) {
 .gc_rds_cache <- new.env(parent = emptyenv())
 .gc_parquet_cache <- new.env(parent = emptyenv())
 .gc_feature_cache <- new.env(parent = emptyenv())
+.gc_feature_plot_cache <- new.env(parent = emptyenv())
 
 matching_atlas_bundle_path <- function(path) {
   if (is.null(path) || !nzchar(path)) {
@@ -1409,6 +1410,19 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
   features <- features[features %in% atlas_features(obj)]
   validate(need(length(features) > 0, "None of the selected genes were found in the loaded atlas object."))
 
+  cache_source <- if (is_atlas_runtime_bundle(obj)) {
+    atlas_bundle_manifest(obj)[["meta_path"]] %||% paste0("bundle:", nrow(atlas_meta(obj)), ":", length(atlas_features(obj)))
+  } else {
+    paste0("mem:", nrow(atlas_meta(obj)), ":", length(atlas_features(obj)))
+  }
+  cache_key <- paste(cache_source, paste(features, collapse = "|"), sep = "::")
+  if (exists(cache_key, envir = .gc_feature_plot_cache, inherits = FALSE)) {
+    cached <- get(cache_key, envir = .gc_feature_plot_cache, inherits = FALSE)
+    coords <- cached$coords
+    label_centers <- cached$label_centers
+    plot_df_zero <- cached$plot_df_zero
+    plot_df_nonzero <- cached$plot_df_nonzero
+  } else {
   coords <- atlas_coords(obj)
   md <- atlas_meta(obj)
 
@@ -1449,12 +1463,13 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
     ]
   }
 
-  expr <- as.data.frame(t(as.matrix(atlas_fetch_expression(obj, features = features, cells = rownames(md)))), stringsAsFactors = FALSE)
+  expr <- as.matrix(atlas_fetch_expression(obj, features = features, cells = rownames(md)))
+  n_cells <- nrow(md)
 
   plot_df <- do.call(
     rbind,
     lapply(features, function(feature) {
-      values <- as.numeric(expr[[feature]])
+      values <- as.numeric(expr[feature, ])
       data.frame(
         UMAP_1 = coords$UMAP_1,
         UMAP_2 = coords$UMAP_2,
@@ -1470,6 +1485,17 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
   plot_df_nonzero <- plot_df[!is.na(plot_df$expression_nonzero), , drop = FALSE]
   if (nrow(plot_df_nonzero) > 0) {
     plot_df_nonzero <- plot_df_nonzero[order(plot_df_nonzero$expression_nonzero), , drop = FALSE]
+  }
+    assign(
+      cache_key,
+      list(
+        coords = coords,
+        label_centers = label_centers,
+        plot_df_zero = plot_df_zero,
+        plot_df_nonzero = plot_df_nonzero
+      ),
+      envir = .gc_feature_plot_cache
+    )
   }
 
   p <- ggplot() +
@@ -1500,7 +1526,7 @@ plot_feature_expression <- function(obj, features, pt_size = 0.35, xlim = NULL, 
     theme(
       panel.grid = element_blank(),
       axis.title = element_text(face = "bold"),
-      strip.text = element_blank(),
+      strip.text = element_text(face = "bold", size = 11, color = "#24333b"),
       strip.background = element_blank()
     )
 
