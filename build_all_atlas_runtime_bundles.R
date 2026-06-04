@@ -31,6 +31,10 @@ atlas_filenames <- c(
 )
 
 build_script <- file.path(repo_dir, "build_atlas_runtime_bundle.R")
+rscript_bin <- Sys.which("Rscript")
+if (!nzchar(rscript_bin)) {
+  stop("Rscript was not found on PATH.")
+}
 
 for (input_path in file.path(app_data_dir(), atlas_filenames)) {
   if (!file.exists(input_path)) {
@@ -41,7 +45,7 @@ for (input_path in file.path(app_data_dir(), atlas_filenames)) {
   message("==== Building Atlas Runtime Bundle ====")
   message("Input: ", input_path)
     status <- system2(
-      command = "/Library/Frameworks/R.framework/Resources/bin/Rscript",
+      command = rscript_bin,
       args = c(build_script, "--input", input_path),
       stdout = "",
       stderr = ""

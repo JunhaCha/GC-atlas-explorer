@@ -33,6 +33,10 @@ atlas_filenames <- c(
 atlas_paths <- file.path(app_data_dir(), atlas_filenames)
 build_script <- file.path(repo_dir, "build_diffuse_intestinal_deg_cache.R")
 force_rebuild <- "--force" %in% commandArgs(trailingOnly = TRUE)
+rscript_bin <- Sys.which("Rscript")
+if (!nzchar(rscript_bin)) {
+  stop("Rscript was not found on PATH.")
+}
 
 for (input_path in atlas_paths) {
   if (!file.exists(input_path)) {
@@ -52,7 +56,7 @@ for (input_path in atlas_paths) {
   message("Output: ", output_path)
 
   status <- system2(
-    command = "/Library/Frameworks/R.framework/Resources/bin/Rscript",
+    command = rscript_bin,
     args = c(build_script, "--input", input_path, "--output", output_path, "--min-samples-per-group", "3"),
     env = c("OMP_NUM_THREADS=1", "R_MAX_VSIZE=100Gb"),
     stdout = "",
