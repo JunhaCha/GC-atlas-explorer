@@ -98,6 +98,110 @@ Start:
 docker compose up -d --build
 ```
 
+## Moving to a new server
+
+When deploying this app to a new server, the safest pattern is:
+
+1. copy the runtime data onto that server locally
+2. mount that local directory into the container as `/data`
+3. rebuild atlas runtime bundles on that server once
+
+### Recommended server setup
+
+Use a host data directory that physically lives on the deployment server and is writable during the one-time bundle-build step.
+
+Example:
+
+```bash
+mkdir -p ~/GCshinyapp_data
+```
+
+Copy the runtime data into that directory so it contains:
+
+- all `*_app_slim.rds` files
+- all `*_avg_cache.rds`
+- `*_quadrant_cache.rds`
+- `*_diffuse_intestinal_deg_cache.rds`
+- color `.rds` files
+- marker / DEG `.xlsx` files
+- `atlas_app_inputs/`
+
+Then point Docker Compose at that local directory:
+
+```bash
+GC_APP_HOST_DATA_DIR=/home/<user>/GCshinyapp_data
+```
+
+### Important note about atlas runtime bundles
+
+The atlas runtime bundle files:
+
+- `*_atlas_bundle_v2.rds`
+- `*_atlas_meta_v2.parquet`
+- `*_atlas_umap_v2.parquet`
+- `*_atlas_gene_expr_v2/`
+
+are path-bound artifacts. The `*_atlas_bundle_v2.rds` manifests store absolute paths to the matching parquet and gene-expression assets.
+
+Because of that:
+
+- copying old bundle manifests from another machine may leave broken paths
+- the most reliable fix is to rebuild the bundle manifests on the target server
+
+After the app container is up and the data is mounted as `/data`, run:
+
+```bash
+docker exec -it \
+  -e GC_APP_DATA_DIR=/data \
+  gc-singlecell-explorer \
+  Rscript /opt/gc-singlecell-explorer/build_all_atlas_runtime_bundles.R
+```
+
+If your `/data` mount is read-only for normal serving, temporarily make it writable for this build step, then switch it back to read-only afterward.
+
+### Verification
+
+Check that the slim objects are visible inside the container:
+
+```bash
+docker exec -it gc-singlecell-explorer bash -lc 'ls /data/*_app_slim.rds'
+```
+
+Check that one atlas bundle loads:
+
+```bash
+docker exec -it gc-singlecell-explorer Rscript -e '
+source("/opt/gc-singlecell-explorer/R/helpers.R")
+obj <- safe_seurat_read("/data/seurat_merged_TME_malignant_final_umap_app_slim.rds")
+cat("class=", class(obj)[1], "\n", sep="")
+cat("cells=", nrow(atlas_meta(obj)), "\n", sep="")
+'
+```
+
+You want:
+
+- `class=atlas_runtime_bundle`
+- a nonzero cell count
+
+Check that Xenium metadata is available:
+
+```bash
+docker exec -it gc-singlecell-explorer Rscript -e '
+source("/opt/gc-singlecell-explorer/R/helpers.R")
+m <- xenium_sample_manifest()
+cat("rows=", nrow(m), "\n", sep="")
+'
+```
+
+### Summary
+
+To avoid future deployment issues:
+
+- keep the runtime data on the deployment server
+- mount it into the container as `/data`
+- rebuild atlas bundle manifests once on that server
+- only rebuild them again if the underlying slim `.rds` inputs change
+
 ## Admin handoff
 1. This repository
 2. A host data directory containing the required `.rds`, cache, and `.xlsx` files
