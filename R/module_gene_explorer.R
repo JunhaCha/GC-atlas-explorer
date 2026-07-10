@@ -50,20 +50,69 @@ gene_explorer_ui <- function(id) {
   )
 }
 
-violin_choice_blacklist <- c(
-  "age",
-  "sampleID",
-  "patientID",
-  "nCount_RNA",
-  "nFeature_RNA",
-  "percent.mito",
-  "nCount_SCT",
-  "nFeature_SCT"
+violin_choice_allow_patterns <- c(
+  "^final_group$",
+  "^final_celltype$",
+  "^sample_celltype$",
+  "^rev_condition$",
+  "^rev_pathological_subtype$",
+  "^rev_molecular_subtype$",
+  "^rev_stage$",
+  "^dataset$",
+  "^cohort$",
+  "^patientID$",
+  "^sampleID$",
+  "^TNM$",
+  "^Pathologic_[TNM]$",
+  "^sex$",
+  "^gender$",
+  "^tumor_normal$",
+  "cell.?type",
+  "patholog",
+  "molecular",
+  "condition",
+  "stage"
+)
+
+violin_choice_block_patterns <- c(
+  "^X(\\.\\d+)?$",
+  "^age$",
+  "^orig\\.ident$",
+  "^seurat_clusters$",
+  "snn",
+  "^nCount_",
+  "^nFeature_",
+  "^percent",
+  "mito",
+  "ribosomal",
+  "doublet",
+  "barcode",
+  "cell[_\\. ]?id"
 )
 
 filtered_violin_choices <- function(obj) {
-  cols <- colnames(atlas_meta(obj))
-  cols[!cols %in% violin_choice_blacklist]
+  md <- atlas_meta(obj)
+  cols <- colnames(md)
+  allowed <- vapply(
+    cols,
+    function(col) any(grepl(paste(violin_choice_allow_patterns, collapse = "|"), col, ignore.case = TRUE)),
+    logical(1)
+  )
+  blocked <- vapply(
+    cols,
+    function(col) any(grepl(paste(violin_choice_block_patterns, collapse = "|"), col, ignore.case = TRUE)),
+    logical(1)
+  )
+  numeric_cols <- vapply(md, is.numeric, logical(1))
+
+  cols[allowed & !blocked & !numeric_cols]
+}
+
+label_violin_choices <- function(cols) {
+  stats::setNames(
+    cols,
+    vapply(cols, violin_display_label, character(1), USE.NAMES = FALSE)
+  )
 }
 
 derive_violin_pathology_group <- function(final_group) {
@@ -117,6 +166,17 @@ gene_explorer_server <- function(id, loaded) {
       plotted_genes(NULL)
       violin_choices <- filtered_violin_choices(loaded()$obj)
       feature_choices <- available_features(loaded()$obj, loaded()$source_path)
+      has_final_group <- "final_group" %in% colnames(atlas_meta(loaded()$obj))
+      synthetic_group_choices <- if (has_final_group) {
+        c("Pathological Group (from final_group)" = ".violin_pathology_group")
+      } else {
+        character(0)
+      }
+      synthetic_split_choices <- if (has_final_group) {
+        c("Normal vs matched GC (from final_group)" = ".violin_gc_status")
+      } else {
+        character(0)
+      }
 
       updateSelectizeInput(
         session,
@@ -129,16 +189,24 @@ gene_explorer_server <- function(id, loaded) {
         session,
         "group_by",
         choices = c(
-          "Pathological Group (from final_group)" = ".violin_pathology_group",
-          stats::setNames(violin_choices, violin_choices)
+          synthetic_group_choices,
+          label_violin_choices(violin_choices)
         ),
         selected = {
-          if ("final_group" %in% colnames(atlas_meta(loaded()$obj))) {
+          if (has_final_group) {
             ".violin_pathology_group"
           } else {
             preferred <- c("rev_pathological_subtype")
             hits <- preferred[preferred %in% violin_choices]
-            if (length(hits) > 0) hits[[1]] else loaded()$group_var
+            if (length(hits) > 0) {
+              hits[[1]]
+            } else if (loaded()$group_var %in% violin_choices) {
+              loaded()$group_var
+            } else if (length(violin_choices) > 0) {
+              violin_choices[[1]]
+            } else {
+              ""
+            }
           }
         }
       )
@@ -147,10 +215,10 @@ gene_explorer_server <- function(id, loaded) {
         "split_by",
         choices = c(
           "None" = "",
-          "Normal vs matched GC (from final_group)" = ".violin_gc_status",
-          stats::setNames(violin_choices, violin_choices)
+          synthetic_split_choices,
+          label_violin_choices(violin_choices)
         ),
-        selected = if ("final_group" %in% colnames(atlas_meta(loaded()$obj))) ".violin_gc_status" else if ("rev_condition" %in% violin_choices) "rev_condition" else ""
+        selected = if (has_final_group) ".violin_gc_status" else if ("rev_condition" %in% violin_choices) "rev_condition" else ""
       )
       if ("final_celltype" %in% colnames(atlas_meta(loaded()$obj))) {
         updateSelectizeInput(

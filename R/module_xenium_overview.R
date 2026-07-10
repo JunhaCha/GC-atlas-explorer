@@ -7,6 +7,7 @@ xenium_overview_ui <- function(id) {
         width = 4,
         card(
           card_header("Sample Summary"),
+          tags$p(class = "small-note", xenium_direct_neighborhood_definition()),
           tableOutput(ns("summary_table"))
         )
       ),
@@ -20,7 +21,7 @@ xenium_overview_ui <- function(id) {
       column(
         width = 4,
         card(
-          card_header("Neighborhood Counts"),
+          card_header("Direct Neighborhood Counts"),
           dataTableOutput(ns("neighborhood_table"))
         )
       )
@@ -36,7 +37,7 @@ xenium_overview_ui <- function(id) {
       column(
         width = 6,
         card(
-          card_header("Cells by Neighborhood"),
+          card_header("Cells by Direct Neighborhood"),
           plotOutput(ns("neighborhood_plot"), height = 360)
         )
       )
@@ -68,7 +69,7 @@ xenium_overview_server <- function(id, loaded) {
     })
 
     output$neighborhood_plot <- renderPlot({
-      xenium_overview_barplot(bundle()$cells, "neighborhood", "Cells by neighborhood")
+      xenium_overview_barplot(bundle()$cells, "neighborhood", "Cells by direct neighborhood")
     })
   })
 }

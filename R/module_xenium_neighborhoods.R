@@ -2,18 +2,19 @@ xenium_neighborhoods_ui <- function(id) {
   ns <- NS(id)
 
   fluidPage(
+    tags$p(class = "small-note", xenium_direct_neighborhood_definition()),
     fluidRow(
       column(
         width = 5,
         card(
-          card_header("Neighborhood Abundance"),
+          card_header("Direct Neighborhood Abundance"),
           plotOutput(ns("abundance_plot"), height = 420)
         )
       ),
       column(
         width = 7,
         card(
-          card_header("Neighborhood Composition"),
+          card_header("Direct Neighborhood Composition"),
           plotOutput(ns("composition_plot"), height = 420)
         )
       )
@@ -22,14 +23,14 @@ xenium_neighborhoods_ui <- function(id) {
       column(
         width = 5,
         card(
-          card_header("Neighborhood Summary Table"),
+          card_header("Direct Neighborhood Summary Table"),
           dataTableOutput(ns("summary_table"))
         )
       ),
       column(
         width = 7,
         card(
-          card_header("Neighborhood Composition Table"),
+          card_header("Direct Neighborhood Composition Table"),
           dataTableOutput(ns("composition_table"))
         )
       )

@@ -19,7 +19,7 @@ xenium_loader_ui <- function(id, title = "Xenium Spatial Data") {
     textOutput(ns("status")),
     tags$div(
       class = "small-note",
-      "Loads only the selected sample image, cell centroids, and precomputed neighborhood summaries."
+      "Loads only the selected sample image, cell centroids, and precomputed direct-neighborhood summaries."
     ),
     tags$div(
       class = "app-sidebar-logo-wrap",
@@ -49,9 +49,10 @@ xenium_loader_server <- function(id) {
       tryCatch({
         bundle <- xenium_sample_bundle(input$sample_id, manifest())
         values$bundle <- bundle
+        sample_label <- xenium_sample_display_label(input$sample_id)
         values$status <- paste0(
           "Loaded sample ",
-          input$sample_id,
+          sample_label,
           " with ",
           format(nrow(bundle$cells), big.mark = ","),
           " cells."

@@ -109,6 +109,28 @@ xenium_sample_labels <- function() {
   stats::setNames(labels_df$display_label, labels_df$sample_id)
 }
 
+xenium_sample_display_label <- function(sample_id) {
+  sample_id <- as.character(sample_id %||% "")
+  if (length(sample_id) == 0 || is.na(sample_id[[1]]) || !nzchar(sample_id[[1]])) {
+    return("")
+  }
+
+  label_map <- xenium_sample_labels()
+  label <- unname(label_map[sample_id[[1]]])
+  if (length(label) == 0 || is.na(label) || !nzchar(label)) {
+    return(sample_id[[1]])
+  }
+
+  label
+}
+
+xenium_direct_neighborhood_definition <- function() {
+  paste(
+    "Direct neighborhoods are defined from the precomputed cell-cell contact graph for each Xenium sample.",
+    "Counts summarize cells assigned to each direct-contact neighborhood class, not Visium-like spots or raw neighbor-pair counts."
+  )
+}
+
 xenium_curated_gene_table <- function() {
   path <- xenium_curated_gene_list_path()
   if (!file.exists(path)) {
@@ -1112,7 +1134,7 @@ plot_harmony_umap <- function(obj, color_mode, label = TRUE, pt_size = 0.4) {
 xenium_color_labels <- c(
   celltype = "Cell Type",
   tumor_normal = "Tumor / Normal",
-  neighborhood = "Neighborhood"
+  neighborhood = "Direct Neighborhood"
 )
 
 xenium_palette_for_var <- function(var_name, values) {
@@ -1148,22 +1170,25 @@ xenium_image_is_plot_asset <- function(bundle) {
 }
 
 xenium_sample_summary <- function(bundle) {
+  image_width <- bundle$image_meta$displayed_width %||% bundle$image_meta$original_width %||% NA
+  image_height <- bundle$image_meta$displayed_height %||% bundle$image_meta$original_height %||% NA
+
   tibble::tibble(
     metric = c(
-      "Sample ID",
+      "Sample",
       "Cells",
       "Cell Types",
-      "Neighborhoods",
-      "Image Width",
-      "Image Height"
+      "Direct Neighborhood Classes",
+      "Image Width (px)",
+      "Image Height (px)"
     ),
     value = c(
-      bundle$sample_id,
+      xenium_sample_display_label(bundle$sample_id),
       format(nrow(bundle$cells), big.mark = ","),
       format(dplyr::n_distinct(bundle$cells$celltype), big.mark = ","),
       format(dplyr::n_distinct(bundle$cells$neighborhood), big.mark = ","),
-      bundle$image_meta$displayed_width %||% bundle$image_meta$original_width %||% NA,
-      bundle$image_meta$displayed_height %||% bundle$image_meta$original_height %||% NA
+      format(as.numeric(image_width), big.mark = ",", trim = TRUE),
+      format(as.numeric(image_height), big.mark = ",", trim = TRUE)
     )
   )
 }
@@ -1288,7 +1313,7 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
 }
 
 plot_xenium_neighborhood_abundance <- function(neighborhood_summary) {
-  validate(need(nrow(neighborhood_summary) > 0, "Neighborhood summary is empty for this sample."))
+  validate(need(nrow(neighborhood_summary) > 0, "Direct neighborhood summary is empty for this sample."))
 
   plot_df <- neighborhood_summary |>
     dplyr::arrange(dplyr::desc(fraction)) |>
@@ -1299,7 +1324,7 @@ plot_xenium_neighborhood_abundance <- function(neighborhood_summary) {
     coord_flip() +
     scale_fill_manual(values = xenium_palette_for_var("neighborhood", as.character(plot_df$neighborhood))) +
     scale_y_continuous(labels = function(x) sprintf("%d%%", round(x * 100))) +
-    labs(x = NULL, y = "Fraction of cells", title = "Neighborhood abundance") +
+    labs(x = NULL, y = "Fraction of cells", title = "Direct neighborhood abundance") +
     theme_minimal(base_size = 12) +
     theme(
       panel.grid.minor = element_blank(),
@@ -1309,7 +1334,7 @@ plot_xenium_neighborhood_abundance <- function(neighborhood_summary) {
 }
 
 plot_xenium_neighborhood_composition <- function(neighborhood_composition, neighborhood_summary = NULL) {
-  validate(need(nrow(neighborhood_composition) > 0, "Neighborhood composition is empty for this sample."))
+  validate(need(nrow(neighborhood_composition) > 0, "Direct neighborhood composition is empty for this sample."))
 
   plot_df <- neighborhood_composition
 
@@ -1334,7 +1359,7 @@ plot_xenium_neighborhood_composition <- function(neighborhood_composition, neigh
   ggplot(plot_df, aes(x = celltype, y = neighborhood, fill = fraction)) +
     geom_tile(color = "white", linewidth = 0.2) +
     scale_fill_viridis_c(option = "C", labels = function(x) sprintf("%d%%", round(x * 100))) +
-    labs(x = NULL, y = NULL, fill = "Fraction", title = "Neighborhood composition by cell type") +
+    labs(x = NULL, y = NULL, fill = "Fraction", title = "Direct neighborhood composition by cell type") +
     theme_minimal(base_size = 12) +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
@@ -1561,11 +1586,24 @@ violin_display_label <- function(var_name) {
   labels <- c(
     ".violin_pathology_group" = "Pathological Group",
     ".violin_gc_status" = "Normal vs Matched GC",
+    "final_group" = "Disease Group",
     "rev_condition" = "Primary/Normal",
     "rev_pathological_subtype" = "Pathological Subtype",
     "rev_molecular_subtype" = "MSS/MSI",
+    "rev_stage" = "Stage",
     "dataset" = "Cohort",
-    "final_celltype" = "Cell Type"
+    "cohort" = "Cohort",
+    "final_celltype" = "Cell Type",
+    "sample_celltype" = "Sample Cell Type",
+    "patientID" = "Patient ID",
+    "sampleID" = "Sample ID",
+    "TNM" = "TNM Stage",
+    "Pathologic_T" = "Pathologic T",
+    "Pathologic_N" = "Pathologic N",
+    "Pathologic_M" = "Pathologic M",
+    "sex" = "Sex",
+    "gender" = "Gender",
+    "tumor_normal" = "Tumor / Normal"
   )
   hit <- labels[var_name]
   if (length(hit) == 0 || is.na(hit)) {
@@ -1583,7 +1621,9 @@ violin_factor_levels <- function(values, var_name) {
     ".violin_pathology_group" = c("Diffuse", "Intestinal", "Mixed"),
     ".violin_gc_status" = c("Normal", "Diffuse GC", "Intestinal GC", "Mixed GC"),
     "rev_condition" = c("Normal", "Primary", "GC"),
+    "rev_pathological_subtype" = c("Diffuse", "Intestinal", "Mixed", "Normal"),
     "rev_molecular_subtype" = c("MSS", "MSI"),
+    "rev_stage" = c("I", "II", "III", "IV"),
     NULL
   )
 

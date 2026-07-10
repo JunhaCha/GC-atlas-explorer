@@ -64,7 +64,7 @@ xenium_workspace_ui <- function(prefix, title) {
     navset_tab(
       id = paste0(prefix, "_tabs"),
       nav_panel("Sample Overview", xenium_overview_ui(paste0(prefix, "_overview"))),
-      nav_panel("Neighborhood Summaries", xenium_neighborhoods_ui(paste0(prefix, "_neighborhoods"))),
+      nav_panel("Direct Neighborhoods", xenium_neighborhoods_ui(paste0(prefix, "_neighborhoods"))),
       nav_panel("Spatial Map", xenium_spatial_ui(paste0(prefix, "_spatial"))),
       nav_panel("Marker Overlay", xenium_marker_ui(paste0(prefix, "_marker")))
     )
