@@ -24,14 +24,14 @@ xenium_neighborhoods_ui <- function(id) {
         width = 5,
         card(
           card_header("Direct Neighborhood Summary Table"),
-          dataTableOutput(ns("summary_table"))
+          DT::DTOutput(ns("summary_table"))
         )
       ),
       column(
         width = 7,
         card(
           card_header("Direct Neighborhood Composition Table"),
-          dataTableOutput(ns("composition_table"))
+          DT::DTOutput(ns("composition_table"))
         )
       )
     )
@@ -56,14 +56,16 @@ xenium_neighborhoods_server <- function(id, loaded) {
       )
     })
 
-    output$summary_table <- renderDataTable({
+    output$summary_table <- DT::renderDT({
       bundle()$neighborhood_summary |>
+        xenium_display_sample_ids() |>
         dplyr::mutate(fraction = sprintf("%.1f%%", fraction * 100))
-    }, options = datatable_simple_pager_options(page_length = 10))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 10))
 
-    output$composition_table <- renderDataTable({
+    output$composition_table <- DT::renderDT({
       bundle()$neighborhood_composition |>
+        xenium_display_sample_ids() |>
         dplyr::mutate(fraction = sprintf("%.1f%%", fraction * 100))
-    }, options = datatable_simple_pager_options(page_length = 12))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 12))
   })
 }

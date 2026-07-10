@@ -15,14 +15,14 @@ xenium_overview_ui <- function(id) {
         width = 4,
         card(
           card_header("Cell Type Counts"),
-          dataTableOutput(ns("celltype_table"))
+          DT::DTOutput(ns("celltype_table"))
         )
       ),
       column(
         width = 4,
         card(
           card_header("Direct Neighborhood Counts"),
-          dataTableOutput(ns("neighborhood_table"))
+          DT::DTOutput(ns("neighborhood_table"))
         )
       )
     ),
@@ -56,13 +56,13 @@ xenium_overview_server <- function(id, loaded) {
       xenium_sample_summary(bundle())
     }, rownames = FALSE, colnames = FALSE)
 
-    output$celltype_table <- renderDataTable({
+    output$celltype_table <- DT::renderDT({
       xenium_count_table(bundle()$cells, "celltype")
-    }, options = datatable_simple_pager_options(page_length = 10))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 10))
 
-    output$neighborhood_table <- renderDataTable({
+    output$neighborhood_table <- DT::renderDT({
       xenium_count_table(bundle()$cells, "neighborhood")
-    }, options = datatable_simple_pager_options(page_length = 10))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 10))
 
     output$celltype_plot <- renderPlot({
       xenium_overview_barplot(bundle()$cells, "celltype", "Cells by cell type")

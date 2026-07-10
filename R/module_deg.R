@@ -46,7 +46,7 @@ deg_ui <- function(id) {
           card_header(uiOutput(ns("deg_table_title"))),
           textOutput(ns("deg_status")),
           br(),
-          dataTableOutput(ns("deg_table"))
+          DT::DTOutput(ns("deg_table"))
         ),
         br(),
         uiOutput(ns("secondary_card")),
@@ -332,11 +332,11 @@ deg_server <- function(id, loaded) {
       paste0("Using precomputed Diffuse-vs-Intestinal cache: ", basename(cache_path))
     })
 
-    output$deg_table <- renderDataTable({
+    output$deg_table <- DT::renderDT({
       df <- filtered_deg()
       validate(need(nrow(df) > 0, "No DEG rows remain after applying the selected filters."))
       format_deg_table_for_display(df)
-    }, options = datatable_simple_pager_options(page_length = 25))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 25))
 
     output$secondary_card <- renderUI({
       ns <- session$ns
@@ -374,7 +374,7 @@ deg_server <- function(id, loaded) {
         br(),
         card(
           card_header("Quadrant Results"),
-          dataTableOutput(ns("quadrant_table"))
+          DT::DTOutput(ns("quadrant_table"))
         )
       )
     })
@@ -410,12 +410,12 @@ deg_server <- function(id, loaded) {
       plot_quadrant_deg(quadrant_results())
     })
 
-    output$quadrant_table <- renderDataTable({
+    output$quadrant_table <- DT::renderDT({
       validate(need(identical(deg_mode(), "quadrant"), ""))
       req(quadrant_results())
       quadrant_results()$plot_df |>
         dplyr::arrange(dplyr::desc(distance))
-    }, options = datatable_simple_pager_options(page_length = 20))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 20))
 
     volcano_cluster_table <- reactive({
       validate(need(identical(deg_mode(), "diffuse_intestinal"), ""))

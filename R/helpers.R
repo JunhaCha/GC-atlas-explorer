@@ -127,8 +127,22 @@ xenium_sample_display_label <- function(sample_id) {
 xenium_direct_neighborhood_definition <- function() {
   paste(
     "Direct neighborhoods are defined from the precomputed cell-cell contact graph for each Xenium sample.",
-    "Counts summarize cells assigned to each direct-contact neighborhood class, not Visium-like spots or raw neighbor-pair counts."
+    "Counts summarize cells assigned to each direct-contact neighborhood class."
   )
+}
+
+xenium_display_sample_ids <- function(df) {
+  if (!is.data.frame(df) || !("sample_id" %in% colnames(df))) {
+    return(df)
+  }
+
+  df$sample_id <- vapply(
+    as.character(df$sample_id),
+    xenium_sample_display_label,
+    character(1),
+    USE.NAMES = FALSE
+  )
+  df
 }
 
 xenium_curated_gene_table <- function() {

@@ -22,7 +22,7 @@ heatmap_ui <- function(id) {
         br(),
         card(
           card_header("Average Expression Table"),
-          dataTableOutput(ns("avg_table"))
+          DT::DTOutput(ns("avg_table"))
         )
       )
     )
@@ -134,9 +134,9 @@ heatmap_server <- function(id, loaded) {
       plot_average_heatmap_from_script(avg_data())
     })
 
-    output$avg_table <- renderDataTable({
+    output$avg_table <- DT::renderDT({
       req(avg_data())
       avg_data()$long
-    }, options = datatable_simple_pager_options(page_length = 12))
+    }, server = TRUE, options = datatable_simple_pager_options(page_length = 12))
   })
 }
