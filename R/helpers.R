@@ -1311,11 +1311,12 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
   plot_df <- bundle$cells |>
     dplyr::mutate(color_value = as.character(.data[[color_by]]))
 
-  plot_df$color_value[is.na(plot_df$color_value) | !nzchar(plot_df$color_value)] <- "NA"
   highlight_celltypes <- unique(as.character(highlight_celltypes))
   highlight_celltypes <- highlight_celltypes[nzchar(highlight_celltypes) & !is.na(highlight_celltypes)]
 
   use_highlight_mode <- length(highlight_celltypes) > 0
+  background_color <- "#C9CED6"
+
   if (use_highlight_mode) {
     first_label <- highlight_celltypes[[1]]
     second_label <- if (length(highlight_celltypes) >= 2) highlight_celltypes[[2]] else NULL
@@ -1326,19 +1327,21 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
       plot_df$plot_group[plot_df$celltype %in% second_label] <- second_label
     }
 
-    color_levels <- c("Other cells", first_label)
-    color_values <- c(
-      "Other cells" = "#C9CED6",
-      stats::setNames("#2C7BE5", first_label)
-    )
+    color_levels <- first_label
+    color_values <- stats::setNames("#2C7BE5", first_label)
 
     if (!is.null(second_label) && !identical(second_label, first_label)) {
       color_levels <- c(color_levels, second_label)
       color_values <- c(color_values, stats::setNames("#D1495B", second_label))
     }
 
-    plot_df$plot_group <- factor(plot_df$plot_group, levels = color_levels)
+    plot_df$plot_group <- factor(plot_df$plot_group, levels = c("Other cells", color_levels))
+  } else if (identical(color_by, "tumor_normal")) {
+    plot_df$plot_group <- ifelse(plot_df$color_value %in% c("Normal", "Tumor"), plot_df$color_value, "Other cells")
+    color_values <- xenium_palette_for_var(color_by, c("Normal", "Tumor"))
+    plot_df$plot_group <- factor(plot_df$plot_group, levels = c("Other cells", names(color_values)))
   } else {
+    plot_df$color_value[is.na(plot_df$color_value) | !nzchar(plot_df$color_value)] <- "NA"
     color_values <- xenium_palette_for_var(color_by, plot_df$color_value)
     plot_df$plot_group <- factor(plot_df$color_value, levels = names(color_values))
   }
@@ -1362,10 +1365,12 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
       if (nrow(background_df) > 0) {
         geom_point(
           data = background_df,
-          aes(x = x_plot, y = y_plot, color = plot_group),
+          aes(x = x_plot, y = y_plot),
+          color = background_color,
           size = point_size,
           alpha = if (use_highlight_mode) min(alpha, 0.25) else alpha,
-          shape = 16
+          shape = 16,
+          show.legend = FALSE
         )
       }
     } +
@@ -1380,7 +1385,7 @@ plot_xenium_spatial_map <- function(bundle, color_by = "celltype", point_size = 
         )
       }
     } +
-    scale_color_manual(values = color_values, na.value = "#9AA5B1") +
+    scale_color_manual(values = color_values, breaks = names(color_values), limits = names(color_values), na.value = "#9AA5B1") +
     coord_fixed(xlim = c(0, width), ylim = c(0, height), expand = FALSE) +
     labs(color = if (use_highlight_mode) "Highlighted cell types" else (xenium_color_labels[[color_by]] %||% color_by)) +
     theme_void(base_size = 12) +
