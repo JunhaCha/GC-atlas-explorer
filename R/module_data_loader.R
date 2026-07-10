@@ -81,7 +81,12 @@ data_loader_server <- function(id, object_choices = NULL) {
       tryCatch({
         obj <- safe_seurat_read(path_to_use)
 
-        updateSelectInput(session, "group_var", choices = colnames(atlas_meta(obj)), selected = default_group_var(obj))
+        updateSelectInput(
+          session,
+          "group_var",
+          choices = atlas_groupable_metadata_choices(obj),
+          selected = default_group_var(obj)
+        )
         updateSelectInput(session, "assay", choices = available_assays(obj), selected = atlas_default_assay(obj))
 
         values$obj <- obj

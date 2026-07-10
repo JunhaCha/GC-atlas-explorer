@@ -73,7 +73,7 @@ coords <- Embeddings(obj, reduction = reduction_name)
 coords <- as.data.frame(coords[, 1:2, drop = FALSE], stringsAsFactors = FALSE)
 colnames(coords) <- c("UMAP_1", "UMAP_2")
 
-meta <- obj[[]]
+meta <- atlas_curated_metadata(obj[[]], display_names = FALSE)
 coords <- coords[rownames(meta), , drop = FALSE]
 meta_out <- cbind(cell_id = rownames(meta), meta, stringsAsFactors = FALSE)
 umap_out <- data.frame(

@@ -418,6 +418,98 @@ color_rds_paths <- c(
   }
 }
 
+atlas_metadata_specs <- function() {
+  list(
+    list(label = "nCount_RNA", aliases = c("nCount_RNA")),
+    list(label = "nFeatureRNA", aliases = c("nFeature_RNA", "nFeatureRNA")),
+    list(label = "percent.mito", aliases = c("percent.mito", "percent.mt")),
+    list(label = "nCount_SCT", aliases = c("nCount_SCT")),
+    list(label = "nFeature_SCT", aliases = c("nFeature_SCT")),
+    list(label = "S.Score", aliases = c("S.Score")),
+    list(label = "G2M.Score", aliases = c("G2M.Score")),
+    list(label = "Phase", aliases = c("Phase")),
+    list(label = "sampleID", aliases = c("sampleID")),
+    list(label = "patientID", aliases = c("patientID")),
+    list(label = "age", aliases = c("age")),
+    list(label = "sex", aliases = c("sex", "gender")),
+    list(label = "dataset", aliases = c("dataset", "cohort")),
+    list(label = "condition", aliases = c("rev_condition", "condition")),
+    list(label = "pathological subtype", aliases = c("rev_pathological_subtype", "pathological_subtype", "pathological subtype")),
+    list(label = "molecular subtype", aliases = c("rev_molecular_subtype", "molecular_subtype", "molecular subtype")),
+    list(label = "stage", aliases = c("rev_stage", "stage")),
+    list(label = "tissue", aliases = c("tissue")),
+    list(label = "hp_infection", aliases = c("hp_infection", "HP_infection", "h_pylori", "hpylori")),
+    list(label = "final_celltype", aliases = c("final_celltype")),
+    list(label = "final_group", aliases = c("final_group"))
+  )
+}
+
+atlas_numeric_metadata_labels <- c(
+  "nCount_RNA",
+  "nFeatureRNA",
+  "percent.mito",
+  "nCount_SCT",
+  "nFeature_SCT",
+  "S.Score",
+  "G2M.Score",
+  "age"
+)
+
+atlas_curated_metadata_map <- function(meta) {
+  cols <- colnames(meta)
+  out_cols <- character(0)
+  out_labels <- character(0)
+
+  for (spec in atlas_metadata_specs()) {
+    hit <- spec$aliases[spec$aliases %in% cols]
+    if (length(hit) > 0) {
+      out_cols <- c(out_cols, hit[[1]])
+      out_labels <- c(out_labels, spec$label)
+    }
+  }
+
+  stats::setNames(out_cols, out_labels)
+}
+
+atlas_curated_metadata <- function(meta, display_names = TRUE) {
+  meta <- as.data.frame(meta, stringsAsFactors = FALSE)
+  keep_map <- atlas_curated_metadata_map(meta)
+  out <- meta[, unname(keep_map), drop = FALSE]
+  if (isTRUE(display_names)) {
+    colnames(out) <- names(keep_map)
+  }
+  out
+}
+
+metadata_display_name <- function(col) {
+  col <- as.character(col)
+  display <- col
+  for (spec in atlas_metadata_specs()) {
+    display[col %in% spec$aliases] <- spec$label
+  }
+  display
+}
+
+rename_metadata_columns_for_display <- function(cols) {
+  metadata_display_name(cols)
+}
+
+atlas_groupable_metadata_choices <- function(obj_or_meta) {
+  meta <- if (is.data.frame(obj_or_meta)) obj_or_meta else atlas_meta(obj_or_meta)
+  keep_map <- atlas_curated_metadata_map(meta)
+  cols <- unname(keep_map)
+  labels <- names(keep_map)
+  if (length(cols) == 0) {
+    return(stats::setNames(character(0), character(0)))
+  }
+
+  numeric_by_type <- vapply(meta[, cols, drop = FALSE], is.numeric, logical(1))
+  numeric_by_policy <- labels %in% atlas_numeric_metadata_labels
+  keep <- !numeric_by_type & !numeric_by_policy
+
+  stats::setNames(cols[keep], labels[keep])
+}
+
 datatable_simple_pager_callback <- function() {
   DT::JS(
     "function(settings) {",
@@ -827,13 +919,26 @@ matching_quadrant_default_pdf_path <- function(path) {
 }
 
 default_group_var <- function(obj) {
-  preferred <- c("final_celltype", "celltype", "cell_type", "seurat_clusters", "ident", "orig.ident")
-  available <- colnames(atlas_meta(obj))
+  available <- unname(atlas_groupable_metadata_choices(obj))
+  preferred <- c(
+    "final_celltype",
+    "final_group",
+    "rev_pathological_subtype",
+    "pathological_subtype",
+    "rev_condition",
+    "condition",
+    "dataset",
+    "sampleID",
+    "patientID"
+  )
   hit <- preferred[preferred %in% available]
   if (length(hit) > 0) {
     return(hit[[1]])
   }
-  available[[1]] %||% NULL
+  if (length(available) > 0) {
+    return(available[[1]])
+  }
+  NULL
 }
 
 available_reductions <- function(obj) {
@@ -893,6 +998,7 @@ available_features <- function(obj, source_path = NULL) {
 object_summary <- function(obj, path = NULL, group_var = NULL) {
   meta <- atlas_meta(obj)
   active_group <- group_var %||% default_group_var(obj)
+  metadata_columns <- names(atlas_curated_metadata_map(meta))
   active_levels <- if (!is.null(active_group) && active_group %in% colnames(meta)) {
     paste(unique(as.character(meta[[active_group]])), collapse = ", ")
   } else {
@@ -914,7 +1020,7 @@ object_summary <- function(obj, path = NULL, group_var = NULL) {
       format(length(atlas_features(obj)), big.mark = ","),
       paste(available_assays(obj), collapse = ", "),
       paste(available_reductions(obj), collapse = ", "),
-      paste(rename_metadata_columns_for_display(colnames(meta)), collapse = ", "),
+      paste(metadata_columns, collapse = ", "),
       active_levels
     )
   )
@@ -950,85 +1056,48 @@ plot_average_heatmap <- function(avg_df) {
     )
 }
 
-metadata_preview_labels <- c(
-  rev_condition = "condition",
-  rev_pathological_subtype = "pathological subtype",
-  rev_molecular_subtype = "molecular subtype",
-  rev_stage = "stage"
-)
-
-rename_metadata_columns_for_display <- function(cols) {
-  renamed <- as.character(cols)
-  named_hits <- renamed %in% names(metadata_preview_labels)
-  renamed[named_hits] <- unname(metadata_preview_labels[renamed[named_hits]])
-  renamed
-}
-
 metadata_preview <- function(obj, n = NULL) {
-  meta <- as.data.frame(atlas_meta(obj), stringsAsFactors = FALSE)
+  meta <- atlas_curated_metadata(atlas_meta(obj), display_names = TRUE)
   if (!is.null(n) && is.finite(n)) {
     meta <- head(meta, n = n)
   }
 
-  colnames(meta) <- rename_metadata_columns_for_display(colnames(meta))
   meta
 }
 
-umap_field_labels <- c(
-  final_celltype = "Cell Type",
-  rev_pathological_subtype = "Pathological Group",
-  rev_condition = "Primary/Normal",
-  rev_molecular_subtype = "MSS/MSI",
-  dataset = "Cohort",
-  sampleID = "Sample ID",
-  patientID = "Patient ID",
-  TNM = "TNM",
-  Phase = "Phase"
-)
-
 heatmap_filter_labels <- c(
-  final_celltype = "Cell Type",
-  dataset = "Cohort",
-  rev_pathological_subtype = "Pathological Subtype",
-  rev_condition = "Primary/Normal",
-  rev_molecular_subtype = "MSS/MSI",
-  sampleID = "Sample ID",
-  patientID = "Patient ID",
-  TNM = "TNM",
+  final_celltype = "final_celltype",
+  final_group = "final_group",
+  dataset = "dataset",
+  rev_condition = "condition",
+  rev_pathological_subtype = "pathological subtype",
+  rev_molecular_subtype = "molecular subtype",
+  rev_stage = "stage",
+  tissue = "tissue",
+  hp_infection = "hp_infection",
+  sampleID = "sampleID",
+  patientID = "patientID",
+  sex = "sex",
   Phase = "Phase"
 )
 
 umap_color_group_info <- function(obj, color_mode) {
   md <- atlas_meta(obj)
 
-  validate(need(color_mode %in% names(umap_field_labels), "Unsupported UMAP color mode."))
+  validate(need(color_mode %in% colnames(md), "Selected UMAP color column was not found in the loaded atlas object."))
 
   field_to_use <- color_mode
-  if (identical(color_mode, "rev_pathological_subtype")) {
-    validate(need("rev_pathological_subtype" %in% colnames(md), "Metadata column 'rev_pathological_subtype' was not found in the selected Seurat object."))
-    field_to_use <- "rev_pathological_subtype"
-  } else {
-    validate(need(field_to_use %in% colnames(md), paste0("Metadata column '", field_to_use, "' was not found in the selected Seurat object.")))
-  }
-
   values <- as.character(md[[field_to_use]])
-  label <- unname(umap_field_labels[[color_mode]])
+  label <- metadata_display_name(color_mode)
 
   if (identical(color_mode, "dataset")) {
     palette <- load_named_palette("dataset")
   } else if (identical(color_mode, "rev_pathological_subtype")) {
     palette <- load_named_palette("path_group")
   } else if (identical(color_mode, "final_celltype")) {
-    if ("final_celltype" %in% colnames(md)) {
-      values <- as.character(md$final_celltype)
-      label <- unname(umap_field_labels[[color_mode]])
-    } else {
-      fallback_group <- default_group_var(obj)
-      validate(need(!is.null(fallback_group) && fallback_group %in% colnames(md), "No cell-type-like grouping was found in the loaded atlas object."))
-      values <- as.character(md[[fallback_group]])
-      label <- "Cell Type (active.ident)"
-    }
     palette <- load_named_palette("celltype")
+  } else if (identical(color_mode, "final_group")) {
+    palette <- load_named_palette("path_group")
   } else {
     palette <- setNames(character(0), character(0))
   }
@@ -1586,28 +1655,11 @@ violin_display_label <- function(var_name) {
   labels <- c(
     ".violin_pathology_group" = "Pathological Group",
     ".violin_gc_status" = "Normal vs Matched GC",
-    "final_group" = "Disease Group",
-    "rev_condition" = "Primary/Normal",
-    "rev_pathological_subtype" = "Pathological Subtype",
-    "rev_molecular_subtype" = "MSS/MSI",
-    "rev_stage" = "Stage",
-    "dataset" = "Cohort",
-    "cohort" = "Cohort",
-    "final_celltype" = "Cell Type",
-    "sample_celltype" = "Sample Cell Type",
-    "patientID" = "Patient ID",
-    "sampleID" = "Sample ID",
-    "TNM" = "TNM Stage",
-    "Pathologic_T" = "Pathologic T",
-    "Pathologic_N" = "Pathologic N",
-    "Pathologic_M" = "Pathologic M",
-    "sex" = "Sex",
-    "gender" = "Gender",
-    "tumor_normal" = "Tumor / Normal"
+    "sample_celltype" = "Sample x Cell Type"
   )
   hit <- labels[var_name]
   if (length(hit) == 0 || is.na(hit)) {
-    return(var_name)
+    return(metadata_display_name(var_name))
   }
   unname(hit)
 }
@@ -2081,7 +2133,7 @@ heatmap_display_label <- function(field) {
   if (identical(field, "sample_celltype")) {
     return("Sample x Cell Type")
   }
-  unname(heatmap_filter_labels[[field]] %||% field)
+  unname(heatmap_filter_labels[[field]] %||% metadata_display_name(field))
 }
 
 build_heatmap_display_choices <- function(cache) {
@@ -2091,7 +2143,7 @@ build_heatmap_display_choices <- function(cache) {
 
 default_heatmap_display_field <- function(cache) {
   fields <- available_heatmap_display_fields(cache)
-  preferred <- c("sample_celltype", "final_celltype", "rev_pathological_subtype", "dataset")
+  preferred <- c("sample_celltype", "final_celltype", "final_group", "rev_pathological_subtype", "dataset")
   hit <- preferred[preferred %in% fields]
   hit[[1]] %||% fields[[1]]
 }

@@ -50,62 +50,8 @@ gene_explorer_ui <- function(id) {
   )
 }
 
-violin_choice_allow_patterns <- c(
-  "^final_group$",
-  "^final_celltype$",
-  "^sample_celltype$",
-  "^rev_condition$",
-  "^rev_pathological_subtype$",
-  "^rev_molecular_subtype$",
-  "^rev_stage$",
-  "^dataset$",
-  "^cohort$",
-  "^patientID$",
-  "^sampleID$",
-  "^TNM$",
-  "^Pathologic_[TNM]$",
-  "^sex$",
-  "^gender$",
-  "^tumor_normal$",
-  "cell.?type",
-  "patholog",
-  "molecular",
-  "condition",
-  "stage"
-)
-
-violin_choice_block_patterns <- c(
-  "^X(\\.\\d+)?$",
-  "^age$",
-  "^orig\\.ident$",
-  "^seurat_clusters$",
-  "snn",
-  "^nCount_",
-  "^nFeature_",
-  "^percent",
-  "mito",
-  "ribosomal",
-  "doublet",
-  "barcode",
-  "cell[_\\. ]?id"
-)
-
 filtered_violin_choices <- function(obj) {
-  md <- atlas_meta(obj)
-  cols <- colnames(md)
-  allowed <- vapply(
-    cols,
-    function(col) any(grepl(paste(violin_choice_allow_patterns, collapse = "|"), col, ignore.case = TRUE)),
-    logical(1)
-  )
-  blocked <- vapply(
-    cols,
-    function(col) any(grepl(paste(violin_choice_block_patterns, collapse = "|"), col, ignore.case = TRUE)),
-    logical(1)
-  )
-  numeric_cols <- vapply(md, is.numeric, logical(1))
-
-  cols[allowed & !blocked & !numeric_cols]
+  unname(atlas_groupable_metadata_choices(obj))
 }
 
 label_violin_choices <- function(cols) {
